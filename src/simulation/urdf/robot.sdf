@@ -1,0 +1,503 @@
+<sdf version='1.9'>
+  <model name='delivery_robot'>
+    <link name='base_footprint'>
+      <inertial>
+        <pose>0 0 0.15 0 0 0</pose>
+        <mass>20</mass>
+        <inertia>
+          <ixx>1.133333333333334</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.333333333333333</iyy>
+          <iyz>0</iyz>
+          <izz>0.33333333333333343</izz>
+        </inertia>
+      </inertial>
+      <collision name='base_footprint_fixed_joint_lump__base_link_collision'>
+        <pose>0 0 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.8 0.4 0.2</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name='base_footprint_fixed_joint_lump__base_link_visual'>
+        <pose>0 0 0.15 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.8 0.4 0.2</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>1 0.625 0 1</diffuse>
+          <ambient>1 0.625 0 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_footprint_fixed_joint_lump__camera_link_visual_1'>
+        <pose>0.4 0 0.3 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.05 0.1 0.05</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>1 0 0 1</diffuse>
+          <ambient>1 0 0 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_footprint_fixed_joint_lump__imu_link_visual_2'>
+        <pose>0 0 0.25 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.02 0.02 0.02</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0 0 0 1</diffuse>
+          <ambient>0 0 0 1</ambient>
+        </material>
+      </visual>
+      <visual name='base_footprint_fixed_joint_lump__lidar_link_visual_3'>
+        <pose>0.3 0 0.3 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.050000000000000003</length>
+            <radius>0.050000000000000003</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0 0 1 1</diffuse>
+          <ambient>0 0 1 1</ambient>
+        </material>
+      </visual>
+      <sensor name='rgbd_camera' type='rgbd_camera'>
+        <camera>
+          <horizontal_fov>1.0469999999999999</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+          </image>
+          <clip>
+            <near>0.10000000000000001</near>
+            <far>100</far>
+          </clip>
+        </camera>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <topic>/camera/image</topic>
+        <pose>0.4 0 0.3 0 -0 0</pose>
+      </sensor>
+      <sensor name='gps' type='navsat'>
+        <topic>/gps/fix</topic>
+        <update_rate>5</update_rate>
+        <always_on>true</always_on>
+        <pose>0 0 0.15 0 -0 0</pose>
+      </sensor>
+      <sensor name='imu_sensor' type='imu'>
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+        <visualize>true</visualize>
+        <topic>/imu</topic>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.00020000000000000001</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.00020000000000000001</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.00020000000000000001</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017000000000000001</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017000000000000001</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0</mean>
+                <stddev>0.017000000000000001</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+        <pose>0 0 0.25 0 -0 0</pose>
+      </sensor>
+      <sensor name='lidar' type='gpu_lidar'>
+        <topic>/scan</topic>
+        <update_rate>10</update_rate>
+        <ray>
+          <scan>
+            <horizontal>
+              <samples>360</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.1400000000000001</min_angle>
+              <max_angle>3.1400000000000001</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.10000000000000001</min>
+            <max>20</max>
+          </range>
+        </ray>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <pose>0.3 0 0.3 0 -0 0</pose>
+        <ignition_frame_id>lidar_link</ignition_frame_id>
+      </sensor>
+    </link>
+    <joint name='front_left_steering_joint' type='revolute'>
+      <pose relative_to='base_footprint'>0.25 0.275 0.04999999999999999 0 0 0</pose>
+      <parent>base_footprint</parent>
+      <child>front_left_steering_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.59999999999999998</lower>
+          <upper>0.59999999999999998</upper>
+          <effort>100</effort>
+          <velocity>1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='front_left_steering_link'>
+      <pose relative_to='front_left_steering_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.10000000000000001</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01</iyy>
+          <iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name='front_left_wheel_joint' type='revolute'>
+      <pose relative_to='front_left_steering_link'>0 0 0 -1.5707 0 0</pose>
+      <parent>front_left_steering_link</parent>
+      <child>front_left_wheel</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-10000000000000000</lower>
+          <upper>10000000000000000</upper>
+        </limit>
+        <dynamics>
+          <damping>0.5</damping>
+          <friction>0.10000000000000001</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='front_left_wheel'>
+      <pose relative_to='front_left_wheel_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>2</mass>
+        <inertia>
+          <ixx>0.01231666666666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01231666666666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.022499999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='front_left_wheel_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='front_left_wheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0 0 0 1</diffuse>
+          <ambient>0 0 0 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='front_right_steering_joint' type='revolute'>
+      <pose relative_to='base_footprint'>0.25 -0.275 0.04999999999999999 0 0 0</pose>
+      <parent>base_footprint</parent>
+      <child>front_right_steering_link</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.59999999999999998</lower>
+          <upper>0.59999999999999998</upper>
+          <effort>100</effort>
+          <velocity>1</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='front_right_steering_link'>
+      <pose relative_to='front_right_steering_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.10000000000000001</mass>
+        <inertia>
+          <ixx>0.01</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01</iyy>
+          <iyz>0</iyz>
+          <izz>0.01</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name='front_right_wheel_joint' type='revolute'>
+      <pose relative_to='front_right_steering_link'>0 0 0 -1.5707 0 0</pose>
+      <parent>front_right_steering_link</parent>
+      <child>front_right_wheel</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-10000000000000000</lower>
+          <upper>10000000000000000</upper>
+        </limit>
+        <dynamics>
+          <damping>0.5</damping>
+          <friction>0.10000000000000001</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='front_right_wheel'>
+      <pose relative_to='front_right_wheel_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>2</mass>
+        <inertia>
+          <ixx>0.01231666666666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01231666666666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.022499999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='front_right_wheel_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='front_right_wheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0 0 0 1</diffuse>
+          <ambient>0 0 0 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='rear_left_wheel_joint' type='revolute'>
+      <pose relative_to='base_footprint'>-0.25 0.275 0.04999999999999999 -1.5707 0 0</pose>
+      <parent>base_footprint</parent>
+      <child>rear_left_wheel</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-10000000000000000</lower>
+          <upper>10000000000000000</upper>
+        </limit>
+        <dynamics>
+          <damping>0.5</damping>
+          <friction>0.10000000000000001</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='rear_left_wheel'>
+      <pose relative_to='rear_left_wheel_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>2</mass>
+        <inertia>
+          <ixx>0.01231666666666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01231666666666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.022499999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='rear_left_wheel_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='rear_left_wheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0 0 0 1</diffuse>
+          <ambient>0 0 0 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='rear_right_wheel_joint' type='revolute'>
+      <pose relative_to='base_footprint'>-0.25 -0.275 0.04999999999999999 -1.5707 0 0</pose>
+      <parent>base_footprint</parent>
+      <child>rear_right_wheel</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-10000000000000000</lower>
+          <upper>10000000000000000</upper>
+        </limit>
+        <dynamics>
+          <damping>0.5</damping>
+          <friction>0.10000000000000001</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='rear_right_wheel'>
+      <pose relative_to='rear_right_wheel_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>2</mass>
+        <inertia>
+          <ixx>0.01231666666666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.01231666666666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.022499999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='rear_right_wheel_collision'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='rear_right_wheel_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.080000000000000002</length>
+            <radius>0.14999999999999999</radius>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0 0 0 1</diffuse>
+          <ambient>0 0 0 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <plugin name='ignition::gazebo::systems::JointStatePublisher' filename='ignition-gazebo-joint-state-publisher-system'>
+      <topic>joint_states</topic>
+    </plugin>
+    <plugin name='ignition::gazebo::systems::AckermannSteering' filename='ignition-gazebo-ackermann-steering-system'>
+      <left_joint>rear_left_wheel_joint</left_joint>
+      <right_joint>rear_right_wheel_joint</right_joint>
+      <left_steering_joint>front_left_steering_joint</left_steering_joint>
+      <right_steering_joint>front_right_steering_joint</right_steering_joint>
+      <wheel_separation>0.45</wheel_separation>
+      <wheel_radius>0.15</wheel_radius>
+      <min_velocity>-5.0</min_velocity>
+      <max_velocity>5.0</max_velocity>
+      <min_acceleration>-3.0</min_acceleration>
+      <max_acceleration>3.0</max_acceleration>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
+      <publish_odom_tf>true</publish_odom_tf>
+      <publish_wheel_tf>true</publish_wheel_tf>
+      <publish_wheel_joint_state>true</publish_wheel_joint_state>
+    </plugin>
+    <plugin name='ignition::gazebo::systems::Sensors' filename='ignition-gazebo-sensors-system'>
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin name='ignition::gazebo::systems::Imu' filename='ignition-gazebo-imu-system'/>
+    <plugin name='ignition::gazebo::systems::NavSat' filename='ignition-gazebo-navsat-system'/>
+    <frame name='camera_joint' attached_to='base_link'>
+      <pose>0.4 0 0.15 0 -0 0</pose>
+    </frame>
+    <frame name='camera_link' attached_to='camera_joint'/>
+    <frame name='gps_joint' attached_to='base_link'>
+      <pose>0 0 0 0 -0 0</pose>
+    </frame>
+    <frame name='gps_link' attached_to='gps_joint'/>
+    <frame name='imu_joint' attached_to='base_link'>
+      <pose>0 0 0.1 0 -0 0</pose>
+    </frame>
+    <frame name='imu_link' attached_to='imu_joint'/>
+    <frame name='lidar_joint' attached_to='base_link'>
+      <pose>0.3 0 0.15 0 -0 0</pose>
+    </frame>
+    <frame name='lidar_link' attached_to='lidar_joint'/>
+    <frame name='base_joint' attached_to='base_footprint'>
+      <pose>0 0 0.15 0 -0 0</pose>
+    </frame>
+    <frame name='base_link' attached_to='base_joint'/>
+  </model>
+</sdf>

@@ -1,0 +1,44 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="washu">
+    <static>true</static>
+    <link name="link">
+
+      <visual name="terrain_visual">
+        <geometry>
+          <mesh><uri>model://washu/meshes/campus_terrain.obj</uri></mesh>
+        </geometry>
+      </visual>
+
+      <collision name="terrain_collision">
+        <geometry>
+          <mesh><uri>model://washu/meshes/campus_terrain.obj</uri></mesh>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>   <mu2>1.0</mu2> </ode>
+          </friction>
+        </surface>
+      </collision>
+
+      <visual name="buildings_visual">
+        <geometry>
+          <mesh><uri>model://washu/meshes/campus_buildings.obj</uri></mesh>
+        </geometry>
+      </visual>
+
+      <collision name="buildings_collision">
+        <geometry>
+          <mesh><uri>model://washu/meshes/campus_buildings.obj</uri></mesh>
+        </geometry>
+        </collision>
+
+      <visual name="footways_visual">
+        <geometry>
+          <mesh><uri>model://washu/meshes/campus_footways.obj</uri></mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

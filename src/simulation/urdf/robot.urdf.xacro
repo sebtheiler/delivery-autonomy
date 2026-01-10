@@ -1,0 +1,308 @@
+<?xml version="1.0"?>
+<robot name="delivery_robot" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:property name="chassis_length" value="0.8"/>
+  <xacro:property name="chassis_width" value="0.4"/>
+  <xacro:property name="chassis_height" value="0.2"/>
+  <xacro:property name="wheel_radius" value="0.15"/>
+  <xacro:property name="wheel_width" value="0.08"/>
+  <xacro:property name="wheel_mass" value="2.0"/>
+  <xacro:property name="chassis_mass" value="20.0"/>
+  
+  <xacro:property name="wheelbase" value="0.5"/>  <xacro:property name="track_width" value="0.55"/> <xacro:macro name="box_inertia" params="m w h d">
+  <inertial>
+    <mass value="${m}"/>
+    <inertia ixx="${m/12 * (h*h + d*d)}" ixy="0" ixz="0"
+             iyy="${m/12 * (w*w + d*d)}" iyz="0"
+             izz="${m/12 * (w*w + h*h)}"/>
+  </inertial>
+</xacro:macro>
+
+<xacro:macro name="cylinder_inertia" params="m r h">
+  <inertial>
+    <mass value="${m}"/>
+    <inertia ixx="${m*(3*r*r + h*h)/12}" ixy="0" ixz="0"
+             iyy="${m*(3*r*r + h*h)/12}" iyz="0"
+             izz="${m*r*r/2}"/>
+  </inertial>
+</xacro:macro>
+
+<link name="base_footprint"/>
+
+<link name="base_link">
+  <visual>
+    <geometry>
+      <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+    </geometry>
+    <material name="orange"><color rgba="1 0.5 0 1"/></material>
+  </visual>
+  <collision>
+    <geometry>
+      <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+    </geometry>
+  </collision>
+  <xacro:box_inertia m="${chassis_mass}" w="${chassis_width}" h="${chassis_height}" d="${chassis_length}"/>
+</link>
+
+<joint name="base_joint" type="fixed">
+  <parent link="base_footprint"/>
+  <child link="base_link"/>
+  <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+</joint>
+
+<xacro:macro name="rear_wheel" params="prefix y_offset">
+  <link name="${prefix}_wheel">
+    <visual>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      <material name="black"><color rgba="0 0 0 1"/></material>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+    </collision>
+    <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
+  </link>
+
+  <joint name="${prefix}_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="${prefix}_wheel"/>
+    <origin xyz="-${wheelbase/2} ${y_offset} -${chassis_height/2}" rpy="-1.5707 0 0"/>
+	<dynamics damping="0.5" friction="0.1"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</xacro:macro>
+
+<xacro:macro name="front_wheel" params="prefix y_offset">
+  
+  <link name="${prefix}_steering_link">
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <joint name="${prefix}_steering_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="${prefix}_steering_link"/>
+    <origin xyz="${wheelbase/2} ${y_offset} -${chassis_height/2}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-0.6" upper="0.6" effort="100" velocity="1.0"/>
+  </joint>
+
+  <link name="${prefix}_wheel">
+    <visual>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      <material name="black"><color rgba="0 0 0 1"/></material>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+    </collision>
+    <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
+  </link>
+
+  <joint name="${prefix}_wheel_joint" type="continuous">
+    <parent link="${prefix}_steering_link"/>
+    <child link="${prefix}_wheel"/>
+    <origin xyz="0 0 0" rpy="-1.5707 0 0"/>
+	<dynamics damping="0.5" friction="0.1"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</xacro:macro>
+
+<xacro:rear_wheel prefix="rear_left" y_offset="${track_width/2}"/>
+<xacro:rear_wheel prefix="rear_right" y_offset="-${track_width/2}"/>
+<xacro:front_wheel prefix="front_left" y_offset="${track_width/2}"/>
+<xacro:front_wheel prefix="front_right" y_offset="-${track_width/2}"/>
+
+<link name="lidar_link">
+  <visual>
+    <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+    <material name="blue"><color rgba="0 0 1 1"/></material>
+  </visual>
+</link>
+<joint name="lidar_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="lidar_link"/>
+  <origin xyz="${chassis_length/2 - 0.1} 0 ${chassis_height/2 + 0.05}" rpy="0 0 0"/>
+</joint>
+
+<link name="camera_link">
+  <visual>
+    <geometry><box size="0.05 0.1 0.05"/></geometry>
+    <material name="red"><color rgba="1 0 0 1"/></material>
+  </visual>
+</link>
+<joint name="camera_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="camera_link"/>
+  <origin xyz="${chassis_length/2} 0 0.15" rpy="0 0 0"/>
+</joint>
+
+<link name="gps_link"/>
+<joint name="gps_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="gps_link"/>
+  <origin xyz="0 0 0" rpy="0 0 0"/>
+</joint>
+<link name="imu_link">
+  <visual>
+    <geometry><box size="0.02 0.02 0.02"/></geometry>
+    <material name="black"><color rgba="0 0 0 1"/></material>
+  </visual>
+</link>
+
+<joint name="imu_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="imu_link"/>
+  <origin xyz="0 0 0.1" rpy="0 0 0"/>
+</joint>
+
+<gazebo reference="imu_link">
+  <sensor name="imu_sensor" type="imu">
+    <always_on>1</always_on>
+    <update_rate>100</update_rate>
+    <visualize>true</visualize>
+    <topic>/imu</topic> <imu>
+    <angular_velocity>
+      <x>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>2e-4</stddev>
+        </noise>
+      </x>
+      <y>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>2e-4</stddev>
+        </noise>
+      </y>
+      <z>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>2e-4</stddev>
+        </noise>
+      </z>
+    </angular_velocity>
+    <linear_acceleration>
+      <x>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>1.7e-2</stddev>
+        </noise>
+      </x>
+      <y>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>1.7e-2</stddev>
+        </noise>
+      </y>
+      <z>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>1.7e-2</stddev>
+        </noise>
+      </z>
+    </linear_acceleration>
+  </imu>
+  </sensor>
+</gazebo>
+
+<gazebo>
+  <plugin filename="ignition-gazebo-joint-state-publisher-system" 
+		  name="ignition::gazebo::systems::JointStatePublisher">
+	<topic>joint_states</topic>
+  </plugin>
+
+  <plugin filename="ignition-gazebo-ackermann-steering-system" name="ignition::gazebo::systems::AckermannSteering">
+
+	<left_joint>rear_left_wheel_joint</left_joint>
+	<right_joint>rear_right_wheel_joint</right_joint>
+
+	<left_steering_joint>front_left_steering_joint</left_steering_joint>
+	<right_steering_joint>front_right_steering_joint</right_steering_joint>
+
+	<wheel_separation>0.45</wheel_separation>
+	<wheel_radius>0.15</wheel_radius>
+
+	<min_velocity>-5.0</min_velocity>
+	<max_velocity>5.0</max_velocity>
+	<min_acceleration>-3.0</min_acceleration>
+	<max_acceleration>3.0</max_acceleration>
+
+	<topic>/cmd_vel</topic>
+	<odom_topic>/odom</odom_topic>
+	<frame_id>odom</frame_id>
+	<child_frame_id>base_footprint</child_frame_id>
+
+	<publish_odom_tf>true</publish_odom_tf>
+	<publish_wheel_tf>true</publish_wheel_tf>
+	<publish_wheel_joint_state>true</publish_wheel_joint_state>
+  </plugin>
+
+  <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+    <render_engine>ogre2</render_engine>
+  </plugin>
+
+  <plugin filename="ignition-gazebo-imu-system" 
+          name="ignition::gazebo::systems::Imu">
+  </plugin>
+
+  <plugin filename="ignition-gazebo-navsat-system" 
+          name="ignition::gazebo::systems::NavSat">
+  </plugin>
+</gazebo>
+
+<gazebo reference="camera_link">
+  <sensor name="rgbd_camera" type="rgbd_camera">
+	<camera>
+	  <horizontal_fov>1.047</horizontal_fov>
+	  <image>
+		<width>640</width>
+		<height>480</height>
+	  </image>
+	  <clip>
+		<near>0.1</near>
+		<far>100</far>
+	  </clip>
+	</camera>
+	<always_on>1</always_on>
+	<update_rate>30</update_rate>
+	<visualize>true</visualize>
+  <topic>/camera/image</topic> </sensor>
+</gazebo>
+
+<gazebo reference="lidar_link">
+  <sensor name="lidar" type="gpu_lidar">
+    <pose>0 0 0 0 0 0</pose>
+    <topic>/scan</topic>
+    <update_rate>10</update_rate>
+    
+    <ignition_frame_id>lidar_link</ignition_frame_id>
+    
+    <ray>
+      <scan>
+        <horizontal>
+          <samples>360</samples>
+          <resolution>1</resolution>
+          <min_angle>-3.14</min_angle>
+          <max_angle>3.14</max_angle>
+        </horizontal>
+      </scan>
+      <range>
+        <min>0.1</min>
+        <max>20.0</max>
+      </range>
+    </ray>
+    <always_on>1</always_on>
+    <visualize>true</visualize>
+  </sensor>
+</gazebo>
+
+<gazebo reference="gps_link">
+  <sensor name="gps" type="navsat">
+    <topic>/gps/fix</topic>
+    <update_rate>5</update_rate>
+    <always_on>1</always_on>
+  </sensor>
+</gazebo>
+
+</robot>

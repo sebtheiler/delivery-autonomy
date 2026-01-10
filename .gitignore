@@ -1,0 +1,10 @@
+.direnv/
+
+# ROS
+build/
+install/
+log/
+
+# GIS
+osm-data/
+map.osm
