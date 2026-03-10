@@ -1,10 +1,12 @@
 import os
+import tempfile
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 import xacro
 from launch_ros.actions import Node
+from ros_ign_gazebo.parameters.rviz import create_sdf_from_urdf
 
 
 def generate_launch_description():
@@ -47,23 +49,16 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Spawn The Robot
-    xacro_file = os.path.join(pkg_share, "urdf", "robot.urdf.xacro")
-    doc = xacro.process_file(xacro_file)
-    robot_desc = doc.toxml()
+    # Process the URDF and convert to SDF
+    robot_desc = xacro.process_file(xacro_file).toxml()
 
-    # Robot State Publisher (RSP)
-    # This takes the URDF string and publishes the /tf tree based on /joint_states
-    rsp = Node(
-        package="robot_state_publisher",
-        executable="robot_state_publisher",
-        name="robot_state_publisher",
-        output="screen",
-        parameters=[{"use_sim_time": True, "robot_description": robot_desc}],
-    )
+    # Create a temporary SDF file from the URDF string
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".sdf") as sdf_file:
+        sdf_filename = sdf_file.name
+        sdf_file.write(create_sdf_from_urdf(robot_desc))
 
-    # TODO: automatically process to SDF
-    sdf_path = os.path.join(pkg_share, "urdf", "robot.sdf")
+    # Path to the temporary SDF file
+    sdf_path = sdf_filename
 
     spawn_cmd = f"""ign service -s /world/washu_campus/create \
     --reqtype ignition.msgs.EntityFactory \
@@ -81,11 +76,10 @@ def generate_launch_description():
     rviz = Node(
         package="rviz2",
         executable="rviz2",
-        arguments=['-d', rviz_config_file],
+        arguments=["-d", rviz_config_file],
         output="screen",
         parameters=[{"use_sim_time": True}],
     )
-
 
     return LaunchDescription(
         [
