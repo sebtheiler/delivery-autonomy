@@ -36,6 +36,8 @@ setup(
         ],
     },
     entry_points={
-        "console_scripts": [],
+        "console_scripts": [
+            'ground_truth_node = simulation.ground_truth_node:main',
+        ],
     },
 )

@@ -4,8 +4,12 @@
     nix-ros-overlay.url = "github:lopsided98/nix-ros-overlay/develop";
     # need to use develop since ros-gz-bridge is not yet available on master
     nixpkgs.follows = "nix-ros-overlay/nixpkgs";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
+
+    seblib.url = "path:/home/sebtheiler/code/seblib"; 
+    # TODO: url = "git+file:///absolute/path/to/seblib";
   };
-  outputs = { self, nix-ros-overlay, nixpkgs }:
+  outputs = { self, nix-ros-overlay, nixpkgs, nixpkgs-unstable, seblib }:
     nix-ros-overlay.inputs.flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -14,7 +18,13 @@
             nix-ros-overlay.overlays.default
           ];
         };
-        rosDistro = "humble";
+
+        sebPkgs = seblib.packages.${system}.default;
+
+        unstablePkgs = import nixpkgs-unstable {
+          inherit system;
+          config.allowUnfree = true;
+        };
 
         pythonWithPackages = pkgs.python312.withPackages (p: with p; [
           numpy
@@ -23,13 +33,16 @@
           debugpy
         ]);
 
+        rosDistro = "humble";
       in {
         devShells.default = pkgs.mkShell {
-          name = "WUAIR";
+          name = "Delivery";
           packages = with pkgs; [
             colcon
             opencv
             pythonWithPackages
+            unstablePkgs.foxglove-studio
+            sebPkgs
 
             (with rosPackages.${rosDistro}; buildEnv {
               paths = [
@@ -50,6 +63,8 @@
                 xacro
                 teleop-twist-keyboard
                 robot-state-publisher
+                foxglove-bridge
+                ros-ign-bridge
               ];
             })
           ];

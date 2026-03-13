@@ -24,11 +24,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1767432239,
-        "narHash": "sha256-bvU1HqE8NCv8KbkYvbmDNsXdiXNh4bS4fRqkXLZB8D0=",
+        "lastModified": 1773393994,
+        "narHash": "sha256-zm24obq1c4ielRR8KlUQ2M5XnNfUIcQjN++9s6CFvxc=",
         "owner": "lopsided98",
         "repo": "nix-ros-overlay",
-        "rev": "3def70a769fba19e7370f4ad0d78669e4f259f19",
+        "rev": "a522c5a050a6d50471a29bbf6a060e2df16abf44",
         "type": "github"
       },
       "original": {
@@ -54,13 +54,62 @@
         "type": "github"
       }
     },
+    "nixpkgs-unstable": {
+      "locked": {
+        "lastModified": 1773282481,
+        "narHash": "sha256-b/GV2ysM8mKHhinse2wz+uP37epUrSE+sAKXy/xvBY4=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "fe416aaedd397cacb33a610b33d60ff2b431b127",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1773282481,
+        "narHash": "sha256-b/GV2ysM8mKHhinse2wz+uP37epUrSE+sAKXy/xvBY4=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "fe416aaedd397cacb33a610b33d60ff2b431b127",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "nix-ros-overlay": "nix-ros-overlay",
         "nixpkgs": [
           "nix-ros-overlay",
           "nixpkgs"
-        ]
+        ],
+        "nixpkgs-unstable": "nixpkgs-unstable",
+        "seblib": "seblib"
+      }
+    },
+    "seblib": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1773426187,
+        "narHash": "sha256-m03nXDX0u8d0Gg45pQvwTxcONDQgSfUFf0qsnpc2C9o=",
+        "path": "/home/sebtheiler/code/seblib",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/sebtheiler/code/seblib",
+        "type": "path"
       }
     },
     "systems": {

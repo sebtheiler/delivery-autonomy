@@ -88,3 +88,10 @@
   ros_type_name: sensor_msgs/msg/JointState
   gz_type_name: ignition.msgs.Model
   direction: GZ_TO_ROS
+
+# Ground truth
+- ros_topic_name: /world/washu_campus/dynamic_pose/info
+  gz_topic_name: /world/washu_campus/dynamic_pose/info
+  ros_type_name: tf2_msgs/msg/TFMessage
+  gz_type_name: ignition.msgs.Pose_V
+  direction: GZ_TO_ROS
