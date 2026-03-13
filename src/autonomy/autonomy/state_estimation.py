@@ -55,7 +55,7 @@ class DeliveryStateEstimationNode(Node):
             Twist, cmd_vel_topic, self.process_cmd_vel_callback, 10
         )
 
-        self.declare_parameter("desired_hz", 20)
+        self.declare_parameter("desired_hz", 100)
         self.desired_hz = self.get_parameter("desired_hz").value
         
         self.loop_timer = self.create_timer(1/self.desired_hz, self.main_loop)
@@ -68,23 +68,21 @@ class DeliveryStateEstimationNode(Node):
         if not self.received_first_gps:
             return
     
-        # Extract yaw from the quaternion
-        q = msg.orientation
-        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
-    
-        z = jnp.array([yaw]) # Pass absolute yaw, not yaw rate
+        omega_z = msg.angular_velocity.z
+        z = jnp.array([omega_z]) 
         timestamp = msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)
+    
         self.ekf.receive_measurement('imu', z, self.current_u, timestamp)
 
     def process_odom_callback(self, msg: Odometry):
         if not self.received_first_gps:
             return
     
-        z = jnp.array([msg.twist.twist.linear.x])
+        v_meas = msg.twist.twist.linear.x
+        omega_meas = msg.twist.twist.angular.z
+        z = jnp.array([v_meas, omega_meas])
+        
         timestamp = msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)
-    
         self.ekf.receive_measurement('odom', z, self.current_u, timestamp)
 
     def process_gps_callback(self, msg: NavSatFix):
@@ -124,8 +122,7 @@ class DeliveryStateEstimationNode(Node):
             # Calculate steering angle required to achieve the commanded yaw rate
             delta = math.atan((omega_cmd * WHEELBASE) / v_cmd)
     
-        # dynamics model needs to be updated...
-        self.current_u = jnp.array([0.0, delta], dtype=jnp.float32)
+        self.current_u = jnp.array([v_cmd, delta], dtype=jnp.float32)
 
     def main_loop(self):
         if self.ekf is None:
