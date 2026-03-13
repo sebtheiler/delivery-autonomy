@@ -22,6 +22,10 @@ class DeliveryStateEstimationNode(Node):
         self.origin_lat = 0.0
         self.origin_lon = 0.0
 
+        self.last_gps_x = None
+        self.last_gps_y = None
+        self.last_gps_time = None
+
         self.declare_parameter("imu_topic", "/imu/data")
         imu_topic = self.get_parameter("imu_topic").value
         
@@ -110,6 +114,24 @@ class DeliveryStateEstimationNode(Node):
         z = jnp.array([x, y], dtype=jnp.float32)
         u = self.current_u
         self.ekf.receive_measurement('gps', z, u, timestamp)
+    
+        if self.last_gps_x is not None:
+            dx = x - self.last_gps_x
+            dy = y - self.last_gps_y
+            dist = math.hypot(dx, dy)
+            dt_gps = timestamp - self.last_gps_time
+        
+            # Only compute heading if moving fast enough to overcome GPS noise
+            v_gps = dist / dt_gps if dt_gps > 0 else 0
+            if v_gps > 0.5: 
+                cog_yaw = math.atan2(dy, dx)
+                z_yaw = jnp.array([cog_yaw], dtype=jnp.float32)
+                self.get_logger().info(f"cog {z_yaw}")
+                self.ekf.receive_measurement('gps_heading', z_yaw, self.current_u, timestamp)
+        
+        self.last_gps_x = x
+        self.last_gps_y = y
+        self.last_gps_time = timestamp
 
     def process_cmd_vel_callback(self, msg: Twist):
         v_cmd = msg.linear.x
@@ -129,12 +151,11 @@ class DeliveryStateEstimationNode(Node):
             return
     
         x = self.ekf.x
+        self.get_logger().info(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}, {x[3]:.2f}, {x[4]:.2f}, {x[5]:.2f}")
+    
         odom = Odometry()
         odom.header.frame_id = "odom"
         odom.child_frame_id = "base_link"
-        # print(x)
-        # print(len(self.ekf.history))
-        print(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}, {x[3]:.2f}")
         odom.pose.pose.position.x = x[0].item()
         odom.pose.pose.position.y = x[1].item()
         odom.pose.pose.orientation = rpy_to_quaternion(0, 0, x[2].item())

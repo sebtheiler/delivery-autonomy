@@ -1,15 +1,15 @@
 import jax
 import jax.numpy as jnp
 
-STATE_DIMENSION = 5  # [x, y, theta, v, omega]
-INPUT_DIMENSION = 2  # [v_cmd, delta]
+STATE_DIMENSION = 6
+INPUT_DIMENSION = 2
 WHEELBASE = 0.5 
 MAX_STEER = 0.785 
 TAU = 0.25 # motor response time constant
 
 @jax.jit
 def dynamics_model(state: jnp.ndarray, inputs: jnp.ndarray, dt: float) -> jnp.ndarray:
-    x, y, theta, v, omega = state
+    x, y, theta, v, omega, b_omega = state
     v_cmd, delta = inputs
 
     theta_mid = theta + 0.5 * omega * dt
@@ -23,4 +23,4 @@ def dynamics_model(state: jnp.ndarray, inputs: jnp.ndarray, dt: float) -> jnp.nd
     omega_cmd = (v / WHEELBASE) * jnp.tan(jnp.clip(delta, -MAX_STEER, MAX_STEER))
     next_omega = omega + ((omega_cmd - omega) / TAU) * dt
 
-    return jnp.array([next_x, next_y, next_theta, next_v, next_omega])
+    return jnp.array([next_x, next_y, next_theta, next_v, next_omega, b_omega])

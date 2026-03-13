@@ -232,7 +232,8 @@
           </y>
           <z>
             <noise type="gaussian">
-              <mean>0.0</mean>
+              <mean>0.05</mean>
+              <!-- Simulate drift -->
               <stddev>2e-4</stddev>
             </noise>
           </z>
