@@ -26,11 +26,14 @@
           config.allowUnfree = true;
         };
 
-        pythonWithPackages = pkgs.python312.withPackages (p: with p; [
+        # Pull the specific Python interpreter ROS Humble is using
+        pythonWithPackages = pkgs.rosPackages.${rosDistro}.python.withPackages (p: with p; [
           numpy
           scipy
           opencv4
           debugpy
+          osmnx
+          shapely
         ]);
 
         rosDistro = "humble";
@@ -65,6 +68,7 @@
                 robot-state-publisher
                 foxglove-bridge
                 ros-ign-bridge
+                tf2-tools
               ];
             })
           ];

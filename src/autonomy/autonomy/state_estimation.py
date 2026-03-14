@@ -7,6 +7,8 @@ from autonomy.utils.latlon2meters import latlon2meters
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu, NavSatFix
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 from seblib.ekf import MultiRateEKF
 import jax.numpy as jnp
 import math
@@ -67,6 +69,8 @@ class DeliveryStateEstimationNode(Node):
         self.state_pub = self.create_publisher(
             Odometry, "/state_estimation/odom", 10
         )
+        
+        self.tf_broadcaster = TransformBroadcaster(self)
 
     def process_imu_callback(self, msg: Imu):
         if not self.received_first_gps:
@@ -150,11 +154,11 @@ class DeliveryStateEstimationNode(Node):
         if self.ekf is None:
             return
     
+        # Odometry
         x = self.ekf.x
-        self.get_logger().info(f"{x[0]:.2f}, {x[1]:.2f}, {x[2]:.2f}, {x[3]:.2f}, {x[4]:.2f}, {x[5]:.2f}")
-    
         odom = Odometry()
         odom.header.frame_id = "odom"
+        odom.header.stamp = self.get_clock().now().to_msg()
         odom.child_frame_id = "base_link"
         odom.pose.pose.position.x = x[0].item()
         odom.pose.pose.position.y = x[1].item()
@@ -162,6 +166,19 @@ class DeliveryStateEstimationNode(Node):
         odom.twist.twist.linear.x = x[3].item()
     
         self.state_pub.publish(odom)
+    
+        # TF
+        t = TransformStamped()
+        t.header.stamp = odom.header.stamp 
+        t.header.frame_id = "odom"
+        t.child_frame_id = "base_link"
+    
+        t.transform.translation.x = odom.pose.pose.position.x
+        t.transform.translation.y = odom.pose.pose.position.y
+        t.transform.translation.z = odom.pose.pose.position.z
+        t.transform.rotation = odom.pose.pose.orientation
+    
+        self.tf_broadcaster.sendTransform(t)
 
 
 def main(args=None):
