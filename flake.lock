@@ -70,22 +70,6 @@
         "type": "github"
       }
     },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1773282481,
-        "narHash": "sha256-b/GV2ysM8mKHhinse2wz+uP37epUrSE+sAKXy/xvBY4=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "fe416aaedd397cacb33a610b33d60ff2b431b127",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
         "nix-ros-overlay": "nix-ros-overlay",
@@ -93,23 +77,7 @@
           "nix-ros-overlay",
           "nixpkgs"
         ],
-        "nixpkgs-unstable": "nixpkgs-unstable",
-        "seblib": "seblib"
-      }
-    },
-    "seblib": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_2"
-      },
-      "locked": {
-        "lastModified": 1773426187,
-        "narHash": "sha256-m03nXDX0u8d0Gg45pQvwTxcONDQgSfUFf0qsnpc2C9o=",
-        "path": "/home/sebtheiler/code/seblib",
-        "type": "path"
-      },
-      "original": {
-        "path": "/home/sebtheiler/code/seblib",
-        "type": "path"
+        "nixpkgs-unstable": "nixpkgs-unstable"
       }
     },
     "systems": {

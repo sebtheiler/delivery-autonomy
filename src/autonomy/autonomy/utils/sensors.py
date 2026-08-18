@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 from autonomy.utils.dynamics import dynamics_model, STATE_DIMENSION, INPUT_DIMENSION
-from seblib.ekf import ekf_predict, ekf_update
+from autonomy.algorithms.ekf import ekf_predict, ekf_update
 
 Q = jnp.diag(jnp.array([
     0.05,  # X

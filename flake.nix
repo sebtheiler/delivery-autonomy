@@ -5,11 +5,8 @@
     # need to use develop since ros-gz-bridge is not yet available on master
     nixpkgs.follows = "nix-ros-overlay/nixpkgs";
     nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
-
-    seblib.url = "path:/home/sebtheiler/code/seblib"; 
-    # TODO: url = "git+file:///absolute/path/to/seblib";
   };
-  outputs = { self, nix-ros-overlay, nixpkgs, nixpkgs-unstable, seblib }:
+  outputs = { self, nix-ros-overlay, nixpkgs, nixpkgs-unstable }:
     nix-ros-overlay.inputs.flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -18,8 +15,6 @@
             nix-ros-overlay.overlays.default
           ];
         };
-
-        sebPkgs = seblib.packages.${system}.default;
 
         unstablePkgs = import nixpkgs-unstable {
           inherit system;
@@ -34,6 +29,8 @@
           debugpy
           osmnx
           shapely
+          jax
+          optax
         ]);
 
         rosDistro = "humble";
@@ -45,7 +42,6 @@
             opencv
             pythonWithPackages
             unstablePkgs.foxglove-studio
-            sebPkgs
 
             (with rosPackages.${rosDistro}; buildEnv {
               paths = [

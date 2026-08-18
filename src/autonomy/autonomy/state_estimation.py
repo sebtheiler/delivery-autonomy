@@ -9,7 +9,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu, NavSatFix
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
-from seblib.ekf import MultiRateEKF
+from autonomy.algorithms.ekf import MultiRateEKF
 import jax.numpy as jnp
 import math
 
@@ -130,7 +130,7 @@ class DeliveryStateEstimationNode(Node):
             if v_gps > 0.5: 
                 cog_yaw = math.atan2(dy, dx)
                 z_yaw = jnp.array([cog_yaw], dtype=jnp.float32)
-                self.get_logger().info(f"cog {z_yaw}")
+                # self.get_logger().info(f"cog {z_yaw}")
                 self.ekf.receive_measurement('gps_heading', z_yaw, self.current_u, timestamp)
         
         self.last_gps_x = x
