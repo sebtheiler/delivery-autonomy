@@ -11,6 +11,8 @@ from shapely.geometry import Point as ShapelyPoint
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros import TransformException
+import math
+import numpy as np
 
 class GlobalPlanningServer(Node):
     def __init__(self):
@@ -110,35 +112,67 @@ class GlobalPlanningServer(Node):
         dense_path.header.stamp = self.get_clock().now().to_msg()
         dense_path.header.frame_id = 'map'
     
+        all_points = []
         for i in range(len(path_node_ids) - 1):
             u = path_node_ids[i]
             v = path_node_ids[i + 1]
         
             edge_data = self.G_projected.get_edge_data(u, v)[0]
         
-            # Check if the edge has a curved geometry
             if 'geometry' in edge_data:
                 # Extract the coordinates from the Shapely LineString
                 xs, ys = edge_data['geometry'].xy
                 points = list(zip(xs, ys))
             else:
-                # It's a straight line, just use the start and end nodes
-                points = [
-                    (self.G_projected.nodes[u]['x'], self.G_projected.nodes[u]['y']),
-                    (self.G_projected.nodes[v]['x'], self.G_projected.nodes[v]['y'])
-                ]
+                # Subdivide straight lines so interpolation doesn't bleed the heading!
+                x0, y0 = self.G_projected.nodes[u]['x'], self.G_projected.nodes[u]['y']
+                x1, y1 = self.G_projected.nodes[v]['x'], self.G_projected.nodes[v]['y']
+                
+                dist = math.hypot(x1 - x0, y1 - y0)
+                # Generate a point every 0.25 meters
+                num_points = max(int(dist / 0.25), 2) 
+                
+                xs = np.linspace(x0, x1, num_points)
+                ys = np.linspace(y0, y1, num_points)
+                points = list(zip(xs, ys))
         
-            # Convert the points to the local metric frame and append to the path
-            for pt_x, pt_y in points:
-                pose = PoseStamped()
-                pose.header = dense_path.header
+            # Drop the overlapping node at intersections to prevent atan2(0,0)
+            if all_points and points:
+                dist_to_prev = math.hypot(points[0][0] - all_points[-1][0], points[0][1] - all_points[-1][1])
+                if dist_to_prev < 0.01:
+                    points = points[1:]
         
-                # Translate from UTM back to local Gazebo 'map' frame
-                pose.pose.position.x = pt_x - self.utm_origin[0]
-                pose.pose.position.y = pt_y - self.utm_origin[1]
-                pose.pose.position.z = 0.0
+            all_points.extend(points)
         
-                dense_path.poses.append(pose)
+        # Convert the points to the local metric frame and append to the path
+        for i, (pt_x, pt_y) in enumerate(all_points):
+            pose = PoseStamped()
+            pose.header = dense_path.header
+        
+            # Translate from UTM back to local Gazebo 'map' frame
+            pose.pose.position.x = pt_x - self.utm_origin[0]
+            pose.pose.position.y = pt_y - self.utm_origin[1]
+            pose.pose.position.z = 0.0
+        
+            # Calculate yaw using the tangent to the next point
+            if i < len(all_points) - 1:
+                next_x, next_y = all_points[i + 1]
+                yaw = math.atan2(next_y - pt_y, next_x - pt_x)
+            else:
+                # For the final point, maintain the heading of the previous segment
+                if i > 0:
+                    prev_x, prev_y = all_points[i - 1]
+                    yaw = math.atan2(pt_y - prev_y, pt_x - prev_x)
+                else:
+                    yaw = 0.0
+        
+            # yaw to quaternion
+            pose.pose.orientation.x = 0.0
+            pose.pose.orientation.y = 0.0
+            pose.pose.orientation.z = math.sin(yaw / 2.0)
+            pose.pose.orientation.w = math.cos(yaw / 2.0)
+        
+            dense_path.poses.append(pose)
         
         marker = Marker()
         marker.header.stamp = self.get_clock().now().to_msg()
