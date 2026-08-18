@@ -8,3 +8,17 @@ log/
 # GIS
 osm-data/
 map.osm
+
+# Python
+__pycache__/
+
+# tf2 view_frames dumps
+frames_*.gv
+frames_*.pdf
+
+# osmnx Overpass cache
+cache/
+
+# Captured datasets and generated figures
+*.npz
+washu_engineering_paths.png
