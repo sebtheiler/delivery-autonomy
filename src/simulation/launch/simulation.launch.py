@@ -69,7 +69,7 @@ def generate_launch_description():
     --reqtype ignition.msgs.EntityFactory \
     --reptype ignition.msgs.Boolean \
     --timeout 1000 \
-    --req 'sdf_filename: "{sdf_path}", name: "delivery_robot", pose: {{position: {{x: -80, y: 20, z: 10.0}}}}'"""
+    --req 'sdf_filename: "{sdf_path}", name: "delivery_robot", pose: {{position: {{x: -95, y: 25.5, z: 5.0}}}}'"""
 
     spawn_robot = ExecuteProcess(
         cmd=["bash", "-c", spawn_cmd],
@@ -95,6 +95,7 @@ def generate_launch_description():
             Node(
                 package="simulation",
                 executable="ground_truth_node",
+                parameters=[{"use_sim_time": True}],
             ),
             rsp,
             rviz,
