@@ -28,7 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
             'state_estimation = autonomy.state_estimation:main',
-            'global_planner = autonomy.global_planner:main'
+            'global_planner = autonomy.global_planner:main',
+            'controller = autonomy.controller:main',
         ],
     },
 )
