@@ -6,9 +6,16 @@ Most of `src/autonomy` and both `.action` files are generated. Edit the org bloc
 
 | Source | Tangles to |
 |---|---|
-| `~/org/roam/20260109142710-delivery.org` | `src/autonomy/**`, `src/shared_types/action/*` |
-| `~/org/roam/20260222072526-extended_kalman_filter.org` | `autonomy/algorithms/ekf.py` |
-| `~/org/roam/20260314170540-model_predictive_path_integral.org` | `autonomy/algorithms/mppi.py` |
+| `docs/20260109142710-delivery.org` | `src/autonomy/**`, `src/shared_types/action/*` |
+| `docs/20260222072526-extended_kalman_filter.org` | `autonomy/algorithms/ekf.py` |
+| `docs/20260314170540-model_predictive_path_integral.org` | `autonomy/algorithms/mppi.py` |
+
+These live in the repo; `~/org/roam/` holds symlinks to them, so they still
+appear as roam nodes. `:tangle` paths are relative, and Org resolves those
+against `buffer-file-name` — which is the *symlink* path when the file is opened
+through roam. Each file therefore carries a `Local Variables` block that pins
+`default-directory` to its truename. Without it, tangling from roam writes to
+`~/org/src/...` silently. Emacs asks once whether to allow that `eval:`.
 
 `src/simulation` is **not** literate — edit it directly.
 

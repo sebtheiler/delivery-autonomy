@@ -1,0 +1,146 @@
+:PROPERTIES:
+:ID:       4f1361c2-eb14-466a-a692-45fbd9c34e47
+:END:
+#+title: Model Predictive Path Integral
+
+ref: https://acdslab.github.io/mppi-generic-website/docs/mppi.html
+
+Model predictive path integral (MPPI) is a stochastic [[id:be493b0d-196b-48c3-8b12-0559f9d7f716][Controller]] for nonlinear [[id:08523a00-73c7-401e-8106-b55cdb875e89][Dynamical Systems]]. Unlike [[id:6b6660b6-1c73-4980-82a6-2ac3152e2bcd][Model Predictive Control]], it does not require the system to be [[id:16f27242-796d-47e1-89a9-a717535cb650][Differentiable]]. Assume the system has dynamics
+
+
+$$\mathbf{x}_{t+1} = f(x_t, u_t)$$
+
+and there is a cost function
+$$J(X, U) = \phi(x_T) + \sum_{t=0}^{T-1} \ell(x_t, u_t)$$
+
+where
++ $X$ and $U$ are the state and input trajectories.
++ $T$ is the time horizon
++ $\phi(x_T)$ is the terminal cost
++ $\ell(x_t, u_t)$ is the running cost
+
+MPPI gives us a method to determine a control input to minimize the cost function. MPPI does not rely on differentiation, so $J$ can be non-[[id:16f27242-796d-47e1-89a9-a717535cb650][Differentiable]].
+
+#+begin_src python :tangle ../src/autonomy/autonomy/algorithms/mppi.py :noweb yes
+import jax
+import jax.numpy as jnp
+
+def mppi(key, f, x0, U, phi, ell, lower_bounds, upper_bounds, sigma=0.5, K=1000, lam=0.1):
+    """
+    key: PRNG key
+    f: Dynamics (needs to be vmapped)
+    x0: Initial state
+    U: Nominal control trajectory (T, m)
+    phi: Final cost function
+    ell: Rolling cost function
+    """
+    T, m = U.shape
+
+    <<epsilon_sample>>
+
+    <<calculate_costs>>
+
+    <<calculate_weights>>
+
+    <<update_control>>
+
+    return U_hat
+#+end_src
+
+A small perturbation $\epsilon$ is sampled from the [[id:e8e631bb-aae6-4ef7-b608-5df9d138f933][Normal Distribution]] and applied to the nominal control trajectory $U$ to produce $V$.
+
+$$\epsilon \sim \mathcal{N}(0, \sigma^2)$$
+
+Sampling $\epsilon$ independently at each timestep produces candidate trajectories that chatter far faster than a real actuator can follow, so the noise is passed through a low pass filter along the time axis first. The noise is generated time-major to feed ~jax.lax.scan~ directly.
+
+#+name: epsilon_sample
+#+begin_src python
+raw_noise = jax.random.normal(key, (T, K, m))
+
+beta = 0.6  # 0.0 leaves the noise white, 1.0 freezes it entirely
+
+def smooth_noise(carry, noise_t):
+    smoothed_val = beta * carry + (1.0 - beta) * noise_t
+    return smoothed_val, smoothed_val
+
+_, eps_time_major = jax.lax.scan(smooth_noise, jnp.zeros((K, m)), raw_noise)
+
+epsilon = jnp.swapaxes(eps_time_major, 0, 1) * sigma
+
+V = U + epsilon
+V = jnp.clip(V, lower_bounds, upper_bounds)
+#+end_src
+
+We calculate the cost $J$ of each trajectory over the simulated horizon. This includes the rolling cost $\ell(x, u)$ for each time step and the terminal cost $\phi(x)$.
+
+$$J(X, U) = \phi(x_T) + \sum_{t=0}^{T-1} \ell(x_t, u_t)$$
+
+A naive implementation would look something like:
+
+#+begin_src python
+J = jnp.zeros(K)
+x = jnp.tile(x0, (K, 1))
+for t in range(T):
+    V_t = V[:, t, :]
+    J += ell(x, V_t)
+    x = f(x, V_t)
+
+J += phi(x)
+#+end_src
+
+But JAX would then unroll the XLA graph $T$ times, which is terrible for compute. A more efficient implementation uses ~jax.lax.scan~. Note that this also passes the current timestep to $\ell$.
+
+#+name: calculate_costs
+#+begin_src python
+def scan_fn(carry, scan_elements):
+    x, J_accum = carry
+    V_t, t = scan_elements
+
+    x_next = f(x, V_t)
+
+    step_cost = ell(x, V_t, t)
+    J_next = J_accum + step_cost
+
+    return (x_next, J_next), None
+
+V_time_major = jnp.swapaxes(V, 0, 1) # (K, T, m) -> (T, K, m)
+
+t_array = jnp.arange(T)
+
+init_states = jnp.tile(x0, (K, 1))
+init_costs = jnp.zeros(K)
+init_carry = (init_states, init_costs)
+
+(x_final, J), _ = jax.lax.scan(
+    scan_fn,
+    init_carry,
+    (V_time_major, t_array),
+)
+J += phi(x_final)
+#+end_src
+
+The weight of each path is calculated exponentially according to cost of each path.
+
+$$w = \frac{\exp(-\frac{1}{\lambda} (J - \rho)))}{\sum_{k=1}^K \exp(-\frac{1}{\lambda} (J- \rho))}$$
+
+where $\rho = \min {J_1, \ldots, J_K}$ is used for numerical stability.
+
+#+name: calculate_weights
+#+begin_src python
+rho = jnp.min(J)
+w = jnp.exp(-(1/lam) * (J - rho))
+w /= jnp.sum(w)
+#+end_src
+
+Finally, the new control trajectory is determined by adding the weighted perturbations to the original.
+
+$$\hat{U} = U + w\epsilon$$
+
+#+name: update_control
+#+begin_src python
+U_hat = U + jnp.sum(w[:, None, None] * epsilon, axis=0)
+#+end_src
+
+# Local Variables:
+# eval: (setq-local default-directory (file-name-directory (file-truename (buffer-file-name))))
+# End:

@@ -10,9 +10,9 @@ the path.
 ## The code comes from Org files
 
 Most of the code in `src/autonomy` is generated. Do not edit those Python files.
-Edit the Org source, then tangle it again. The Org files are these:
+Edit the Org source in `docs/`, then tangle it again. The Org files are these:
 
-| Org file | It generates |
+| Org file in `docs/` | It generates |
 |---|---|
 | `20260109142710-delivery.org` | `src/autonomy/`, `src/shared_types/action/` |
 | `20260222072526-extended_kalman_filter.org` | `autonomy/algorithms/ekf.py` |
