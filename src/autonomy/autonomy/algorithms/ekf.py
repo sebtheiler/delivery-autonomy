@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import time
 import bisect
 
 def ekf_update(
@@ -57,11 +56,6 @@ def ekf_predict(
     P_k_pred = F_k @ P_k_1 @ F_k.T + Q * dt
 
     return x_k_pred, P_k_pred
-
-
-import bisect
-
-import bisect
 
 class MultiRateEKF:
     def __init__(self, initial_x, initial_P, measurement_fcns, timestamp, buffer_size=50):

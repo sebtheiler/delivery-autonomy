@@ -12,15 +12,9 @@ def mppi(key, f, x0, U, phi, ell, lower_bounds, upper_bounds, sigma=0.5, K=1000,
     """
     T, m = U.shape
 
-    # epsilon = sigma * jax.random.normal(key, (K, T, m))
-    # V = U + epsilon # control trajectory with disturbances
-    # V = jnp.clip(V, lower_bounds, upper_bounds)
+    raw_noise = jax.random.normal(key, (T, K, m))
     
-    # 1. Generate raw white noise, time-major for the JAX scan
-    raw_noise = jax.random.normal(key, (T, K, m)) 
-    
-    # 2. Apply a temporal low-pass filter to simulate actuator inertia
-    beta = 0.6 # Smoothing factor: 0.0 is white noise (instant), 0.9 is very sluggish
+    beta = 0.6  # 0.0 leaves the noise white, 1.0 freezes it entirely
     
     def smooth_noise(carry, noise_t):
         smoothed_val = beta * carry + (1.0 - beta) * noise_t
@@ -28,10 +22,8 @@ def mppi(key, f, x0, U, phi, ell, lower_bounds, upper_bounds, sigma=0.5, K=1000,
     
     _, eps_time_major = jax.lax.scan(smooth_noise, jnp.zeros((K, m)), raw_noise)
     
-    # 3. Swap back to (K, T, m) and scale by your sigma
-    epsilon = jnp.swapaxes(eps_time_major, 0, 1) * sigma 
+    epsilon = jnp.swapaxes(eps_time_major, 0, 1) * sigma
     
-    # 4. Generate candidate trajectories
     V = U + epsilon
     V = jnp.clip(V, lower_bounds, upper_bounds)
 

@@ -22,3 +22,5 @@ cache/
 # Captured datasets and generated figures
 *.npz
 washu_engineering_paths.png
+
+.agent-shell/
