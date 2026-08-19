@@ -28,7 +28,7 @@ setup(
     zip_safe=True,
     maintainer="sebtheiler",
     maintainer_email="25444757+sebtheiler@users.noreply.github.com",
-    description="TODO: Package description",
+    description="Gazebo world, robot model, and ground truth publisher for the delivery robot",
     license="TODO: License declaration",
     extras_require={
         "test": [

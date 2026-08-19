@@ -35,13 +35,6 @@
   gz_type_name: ignition.msgs.Odometry
   direction: GZ_TO_ROS
 
-# TODO: remove?
-- ros_topic_name: /tf
-  gz_topic_name: /tf
-  ros_type_name: tf2_msgs/msg/TFMessage
-  gz_type_name: ignition.msgs.Pose_V
-  direction: GZ_TO_ROS
-
 # Camera
 - ros_topic_name: /camera/image_raw
   gz_topic_name: /camera/image/image
