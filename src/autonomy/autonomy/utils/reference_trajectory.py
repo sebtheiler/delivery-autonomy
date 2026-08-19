@@ -1,57 +1,8 @@
 import numpy as np
 
-def extract_xy_theta_from_msg(path_msg):
-    if not path_msg.poses:
-        return np.empty((0, 3))
-
-    data = np.array([
-        [
-            p.pose.position.x,
-            p.pose.position.y,
-            p.pose.orientation.x,
-            p.pose.orientation.y,
-            p.pose.orientation.z,
-            p.pose.orientation.w
-        ]
-        for p in path_msg.poses
-    ])
-
-    x = data[:, 0]
-    y = data[:, 1]
-    qx = data[:, 2]
-    qy = data[:, 3]
-    qz = data[:, 4]
-    qw = data[:, 5]
-
-    # Convert from quaternion to yaw (theta)
-    siny_cosp = 2.0 * (qw * qz + qx * qy)
-    cosy_cosp = 1.0 - 2.0 * (qy**2 + qz**2)
-    theta = np.arctan2(siny_cosp, cosy_cosp)
-
-    return np.column_stack((x, y, theta))
-
-# def process_path(path_msg):
-#     path_data = extract_xy_theta_from_msg(path_msg)
-#     print(path_data)
-#     path_xy = path_data[:, :2]
-#     path_theta = path_data[:, 2]
-    
-#     # Calculate Euclidean distance between consecutive waypoints
-#     diffs = np.diff(path_xy, axis=0)
-#     distances = np.linalg.norm(diffs, axis=1)
-    
-#     # Cumulative sum to get arc length 's' at each waypoint
-#     # Insert 0.0 at the beginning for the first waypoint
-#     path_s = np.insert(np.cumsum(distances), 0, 0.0)
-    
-#     # Unwrap theta to prevent interpolation errors across the -pi/pi boundary
-#     path_theta_unwrapped = np.unwrap(path_theta)
-    
-#     return path_xy, path_theta_unwrapped, path_s
-import numpy as np
+MIN_DIST = 0.1
 
 def process_path(path_msg):
-    # 1. Extract raw coordinates from the ROS message
     raw_x = [pose.pose.position.x for pose in path_msg.poses]
     raw_y = [pose.pose.position.y for pose in path_msg.poses]
     raw_xy = np.column_stack((raw_x, raw_y))
@@ -59,37 +10,27 @@ def process_path(path_msg):
     if len(raw_xy) < 2:
         return raw_xy, np.zeros(len(raw_xy)), np.zeros(len(raw_xy))
 
-    # 2. Enforce the 10cm Rule (Spatial Resampling)
-    # Only keep a waypoint if it is at least 0.1 meters away from the previous one.
-    # This destroys dense clusters and prevents arctan2 singularities.
-    MIN_DIST = 0.1 
     filtered_xy = [raw_xy[0]]
-    
     for pt in raw_xy[1:]:
-        dist = np.linalg.norm(pt - filtered_xy[-1])
-        if dist >= MIN_DIST:
+        if np.linalg.norm(pt - filtered_xy[-1]) >= MIN_DIST:
             filtered_xy.append(pt)
-            
-    # Always include the exact final goal point
+
+    # The goal must survive filtering even if it falls close to its predecessor
     if np.linalg.norm(raw_xy[-1] - filtered_xy[-1]) > 0.01:
         filtered_xy.append(raw_xy[-1])
-        
+
     filtered_xy = np.array(filtered_xy)
 
-    # 3. Calculate reliable path arc length (s)
     diffs = np.diff(filtered_xy, axis=0)
     dists = np.linalg.norm(diffs, axis=1)
     path_s = np.concatenate(([0.0], np.cumsum(dists)))
 
-    # 4. Calculate stable headings using the filtered points
-    dx = diffs[:, 0]
-    dy = diffs[:, 1]
-    path_theta = np.arctan2(dy, dx)
-    
-    # Duplicate the last heading for the final point to keep arrays equal length
+    path_theta = np.arctan2(diffs[:, 1], diffs[:, 0])
+
+    # The final point has no successor, so it inherits the preceding heading
     path_theta = np.append(path_theta, path_theta[-1])
 
-    # 5. Unwrap the heading to prevent 2*pi jumps during linear interpolation
+    # Unwrapped so that interpolation does not jump across the pi boundary
     path_theta_unwrapped = np.unwrap(path_theta)
 
     return filtered_xy, path_theta_unwrapped, path_s
