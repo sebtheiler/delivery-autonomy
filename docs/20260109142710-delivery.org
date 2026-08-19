@@ -143,7 +143,7 @@ import jax.numpy as jnp
 
 STATE_DIMENSION = 6
 INPUT_DIMENSION = 2
-WHEELBASE = 0.615  # Larger than the chassis to absorb tire slip
+WHEELBASE = 0.5  # Must match <wheel_base> in the robot description / Ackermann plugin
 MAX_STEER = 0.6
 DRIVE_TAU = 0.01
 STEER_TAU = 0.545
@@ -1064,7 +1064,7 @@ def execute_callback(self, goal_handle):
 #+end_src
 
 ** Control Loop
-Note that the wheelbase used to emit a command is /not/ the one the dynamics model predicts with. The command is a yaw rate that the Gazebo Ackermann plugin decodes back into a steering angle, so this value has to match the ~wheel_base~ declared in the robot description. The model's ~WHEELBASE~ is deliberately larger to absorb tire slip.
+The control loop is the heart of the controller. It receives the current path and runs MPPI against the reference trajectory. This gives it the optimal control input to publish to the robot.
 
 #+name: control_vars
 #+begin_src python
@@ -1155,11 +1155,11 @@ def control_loop_callback(self):
 curr_x, curr_y = self.current_state[0], self.current_state[1]
 curr_theta = self.current_state[2]
 
-# 3. Calculate errors
+# Calculate errors
 dist_to_goal = np.hypot(goal_x - curr_x, goal_y - curr_y)
 yaw_err = abs((curr_theta - goal_theta + np.pi) % (2 * np.pi) - np.pi)
 
-# 4. Check termination condition
+# Check termination condition
 if dist_to_goal < xy_goal_tolerance and yaw_err < yaw_goal_tolerance:
     # Stop the motors
     self.publish_command(np.zeros(INPUT_DIMENSION)) 
@@ -1246,12 +1246,12 @@ def get_local_reference(state, path_xy, path_theta_unwrapped, path_s, T, dt, v_t
     lookahead_dist = 0.5
     s_target = s_current + lookahead_dist + np.arange(T) * (v_target * dt)
     
-    # 3. Linearly interpolate x, y, and unwrapped theta at the target 's' values
+    # Linearly interpolate x, y, and unwrapped theta at the target 's' values
     ref_x = np.interp(s_target, path_s, path_xy[:, 0])
     ref_y = np.interp(s_target, path_s, path_xy[:, 1])
     ref_theta_unwrapped = np.interp(s_target, path_s, path_theta_unwrapped)
     
-    # 4. Re-wrap theta back to [-pi, pi]
+    # Re-wrap theta back to [-pi, pi]
     ref_theta = (ref_theta_unwrapped + np.pi) % (2 * np.pi) - np.pi
     
     return np.stack([ref_x, ref_y, ref_theta], axis=-1), closest_idx
@@ -1402,7 +1402,7 @@ class BehaviorNode(Node):
         self.controller_client = ActionClient(self, FollowPath, '/follow_path')
 
     def plan_and_move(self, target_node_id):
-        # 1. Block and wait for the path
+        # Block and wait for the path
         self.get_logger().info('Connecting to planner...')
         self.planner_client.wait_for_server()
 
@@ -1422,7 +1422,7 @@ class BehaviorNode(Node):
         
         computed_path = result_future.result().result.path
 
-        # 2. Fire the path off to the controller
+        # Send the path to the controller
         self.get_logger().info('Path received! Connecting to controller...')
         self.controller_client.wait_for_server()
 

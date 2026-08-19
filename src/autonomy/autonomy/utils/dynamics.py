@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 STATE_DIMENSION = 6
 INPUT_DIMENSION = 2
-WHEELBASE = 0.615  # Larger than the chassis to absorb tire slip
+WHEELBASE = 0.5  # Must match <wheel_base> in the robot description / Ackermann plugin
 MAX_STEER = 0.6
 DRIVE_TAU = 0.01
 STEER_TAU = 0.545

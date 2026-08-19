@@ -52,7 +52,3 @@ Everything runs in the one devshell now: `src/simulation/scripts/run_simulator.s
 ## The map->odom transform is a hardcoded calibration
 
 `autonomy.launch.py` publishes a fixed `map`->`odom` transform, and `state_estimation` sets its origin at the **first GPS fix it receives**. The two only agree if the robot is sitting at the spawn point when state estimation starts. After driving the robot around, restart the stack *and* respawn the robot, or every downstream frame is offset by however far it moved.
-
-## Two different wheelbases, deliberately
-
-`dynamics.WHEELBASE = 0.615` is the prediction model, inflated to absorb tire slip. `controller.steering_wheel_base = 0.5` converts a steering angle into the yaw rate the Ackermann plugin decodes, so it must track `<wheel_base>` in `robot.urdf.xacro`. Unifying them understeers every command.
