@@ -39,8 +39,7 @@ class ControllerActionServer(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # self.declare_parameter("state_topic", "/state_estimation/odom")
-        self.declare_parameter("state_topic", "/ground_truth/odom")
+        self.declare_parameter("state_topic", "/state_estimation/odom")
         state_topic = self.get_parameter("state_topic").value
         
         self.current_state = None

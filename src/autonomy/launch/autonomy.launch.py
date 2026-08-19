@@ -25,7 +25,6 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='map_to_odom_broadcaster',
         # Arguments: x y z yaw pitch roll parent_frame child_frame
-        # arguments=['-93', '25.5', '2', '0', '0', '0', 'map', 'odom'],
         arguments=['-93.5', '25.5', '2', '0', '0', '0', 'map', 'odom'],
         parameters=[sim_time_param]
     )
@@ -49,6 +48,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        use_sim_time_arg,
         state_estimation_node,
         static_tf_node,
         path_planning_node,
