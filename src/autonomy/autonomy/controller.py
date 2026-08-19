@@ -57,7 +57,7 @@ class ControllerActionServer(Node):
         )
 
         self.T = 30 # TODO: make param
-        self.wheelbase = 0.5
+        self.steering_wheel_base = 0.5  # Must match <wheel_base> in robot.urdf.xacro
         self.dt = 0.1
         self.rng = jax.random.PRNGKey(42)
         self.U_nominal = jnp.zeros((self.T, INPUT_DIMENSION))
@@ -113,14 +113,12 @@ class ControllerActionServer(Node):
         max_steer = 0.6
         v_cmd_float = max(min(v_cmd_float, V_LIMIT), -V_LIMIT)
         delta_clipped = np.clip(delta_float, -max_steer, max_steer)
-        omega = (v_cmd_float / self.wheelbase) * np.tan(delta_clipped)
+        omega = (v_cmd_float / self.steering_wheel_base) * np.tan(delta_clipped)
     
         cmd_vel = Twist()
-        
+    
         cmd_vel.linear.x = v_cmd_float
         cmd_vel.angular.z = omega
-    
-        self.get_logger().info(f"u: {v_cmd}, {delta}")
     
         self.cmd_pub.publish(cmd_vel)
 
@@ -141,8 +139,6 @@ class ControllerActionServer(Node):
     def control_loop_callback(self):
         if not self.active_goal or self.current_state is None:
             return
-    
-        start_time = time.perf_counter()
     
         path_xy, path_theta_unwrapped, path_s = self.current_path
     
@@ -177,63 +173,45 @@ class ControllerActionServer(Node):
             self.active_goal = False
             return
     
+        # Optimise from where the robot will be once this solve finishes, not where
+        # it was when the solve started
         future_state = dynamics_model(self.current_state, self.last_u, dt=self.dt) if self.last_u is not None else self.current_state
-        # future_state = self.current_state
-        
-        # 3. Feed THIS future state into your reference generator and MPPI
+    
         ref_traj_np, self.progress_idx = get_local_reference(
-            future_state, 
-            path_xy, 
-            path_theta_unwrapped, 
-            path_s, 
-            self.T, 
-            self.dt, 
+            future_state,
+            path_xy,
+            path_theta_unwrapped,
+            path_s,
+            self.T,
+            self.dt,
             v_target=V_TARGET,
             progress_idx=self.progress_idx,
         )
         ref_traj_jax = jnp.array(ref_traj_np)
     
-        # ref_traj_np, self.progress_idx = get_local_reference(
-        #     self.current_state, 
-        #     path_xy, 
-        #     path_theta_unwrapped, 
-        #     path_s, 
-        #     self.T, 
-        #     self.dt, 
-        #     v_target=V_TARGET,
-        #     progress_idx=self.progress_idx,
-        # )
-        # ref_traj_jax = jnp.array(ref_traj_np)
-    
         self.rng, iter_key = jax.random.split(self.rng)
     
         U_opt = mppi_step(
-            key=iter_key, 
-            # x0=self.current_state, 
-            x0=future_state, 
-            U_nominal=self.U_nominal, 
+            key=iter_key,
+            x0=future_state,
+            U_nominal=self.U_nominal,
             ref_traj=ref_traj_jax,
             v_target=V_TARGET,
         )
-        self.get_logger().info("Calculated u")
     
-        # TODO: make pararm
+        # TODO: make params
         # [min_v, min_delta]
-        lower_bounds = jnp.array([-0.5, -0.6]) 
-        upper_bounds = jnp.array([1.5, 0.6])  
+        lower_bounds = jnp.array([-0.5, -0.6])
+        upper_bounds = jnp.array([1.5, 0.6])
         U_opt = jnp.clip(U_opt, lower_bounds, upper_bounds)
     
         u = U_opt[0]
         self.publish_command(u)
         self.last_u = u
     
-        # shift left, duplicate last
+        # Warm start the next solve by shifting the horizon forward one step
         self.U_nominal = jnp.roll(U_opt, shift=-1, axis=0)
         self.U_nominal = self.U_nominal.at[-1].set(U_opt[-1])
-        # self.U_nominal = self.U_nominal.at[-1].set(jnp.array([0.5, 0.0]))
-    
-        elapsed_time = time.perf_counter() - start_time
-        self.get_logger().info(f"Callback execution time: {elapsed_time:.6f} seconds")
 
 def main(args=None):
     rclpy.init(args=args)
