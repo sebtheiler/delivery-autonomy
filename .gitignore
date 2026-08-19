@@ -6,8 +6,8 @@ install/
 log/
 
 # GIS
-osm-data/
-map.osm
+worldgen/osm-data/
+worldgen/map.osm
 
 # Python
 __pycache__/
