@@ -79,7 +79,7 @@ class ControllerActionServer(Node):
                 rclpy.duration.Duration(seconds=0.1) # Small timeout
             )
         except TransformException as ex:
-            self.get_logger().warn(f'Could not transform map to base_link: {ex}')
+            self.get_logger().warning(f'Could not transform map to base_link: {ex}')
             return None
     
         # Extract Position in Map frame
@@ -142,7 +142,7 @@ class ControllerActionServer(Node):
         path_xy, path_theta_unwrapped, path_s = self.current_path
     
         if len(path_xy) == 0:
-            self.get_logger().warn("Received empty path. Stopping robot.")
+            self.get_logger().warning("Received empty path. Stopping robot.")
             self.publish_command(jnp.zeros(INPUT_DIMENSION)) 
             self.active_goal = False
             return

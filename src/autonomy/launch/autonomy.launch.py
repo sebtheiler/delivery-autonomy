@@ -24,8 +24,7 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         name='map_to_odom_broadcaster',
-        # Arguments: x y z yaw pitch roll parent_frame child_frame
-        arguments=['-93.5', '25.5', '2', '0', '0', '0', 'map', 'odom'],
+        arguments=['--x', '-93.5', '--y', '25.5', '--z', '2', '--roll', '0', '--pitch', '0', '--yaw', '0', '--frame-id', 'map', '--child-frame-id', 'odom'],
         parameters=[sim_time_param]
     )
 

@@ -61,8 +61,8 @@ The simulator is ready when the log shows 12 bridges.
 In a second terminal, start the nodes that show the robot:
 
 ```sh
-nix develop
-source install/setup.bash
+# nix develop
+# source install/setup.bash
 ros2 launch simulation simulation.launch.py
 ```
 
@@ -71,8 +71,6 @@ This starts RViz, the robot state publisher, and the ground truth publisher.
 In a third terminal, start the autonomy stack:
 
 ```sh
-nix develop
-source install/setup.bash
 ros2 launch autonomy autonomy.launch.py use_sim_time:=true
 ```
 
@@ -83,7 +81,7 @@ starts with `Sample Node IDs for testing:`. Keep one of these IDs.
 
 ### 4. Send a delivery goal
 
-Give the robot a goal. Use one of the node IDs from step 3:
+In a fourth terminal, give the robot a goal. Use one of the node IDs from step 3:
 
 ```sh
 python src/autonomy/autonomy/behavior.py 1282043935

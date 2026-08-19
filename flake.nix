@@ -3,7 +3,7 @@
   inputs = {
     nix-ros-overlay.url = "github:lopsided98/nix-ros-overlay/develop";
     nixpkgs.follows = "nix-ros-overlay/nixpkgs";
-    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
   outputs = { self, nix-ros-overlay, nixpkgs, nixpkgs-unstable }:
     nix-ros-overlay.inputs.flake-utils.lib.eachDefaultSystem (system:
@@ -33,6 +33,9 @@
         ]);
 
         rosDistro = "lyrical";
+
+        # gz-gui 10's QML (GzSnackBar.qml) imports Qt5Compat.GraphicalEffects.
+        qt5compat = pkgs.qt6Packages.qt5compat;
       in {
         devShells.default = pkgs.mkShell {
           name = "Delivery";
@@ -40,6 +43,7 @@
             colcon
             opencv
             pythonWithPackages
+            qt5compat
             unstablePkgs.foxglove-studio
 
             (with rosPackages.${rosDistro}; buildEnv {
@@ -69,6 +73,10 @@
               ];
             })
           ];
+
+          # qt5compat installs to its own store path; Qt only searches the
+          # qtbase prefix, so point the QML engine at it explicitly.
+          QML2_IMPORT_PATH = "${qt5compat}/lib/qt-6/qml";
         };
       });
   nixConfig = {

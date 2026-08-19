@@ -17,11 +17,11 @@ the wrong location silently. Emacs asks once whether to allow that `eval:`.
 
 `src/simulation` is **not** literate — edit it directly.
 
-Before re-tangling, tangle to a scratch dir and diff against the repo. Org and repo can drift, and tangling silently overwrites repo-side edits:
+To change tangled code: edit the org block, then tangle in place and let git catch drift:
 
 ```sh
-sed 's|~/code/delivery/|/tmp/tc/|g' <note>.org > /tmp/tc/doc.org   # mkdir the tree first
-emacs --batch -Q --eval '(progn (require (quote org)) (org-babel-tangle-file "/tmp/tc/doc.org"))'
+emacs --batch -Q --eval '(progn (require (quote org)) (org-babel-tangle-file "docs/<note>.org"))'
+git status --porcelain src/   # review before committing
 ```
 
 ## pkill/pgrep kill the calling shell
