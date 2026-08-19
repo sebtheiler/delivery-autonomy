@@ -262,10 +262,10 @@
     </sensor>
   </gazebo>
   <gazebo>
-    <plugin filename="ignition-gazebo-joint-state-publisher-system" name="ignition::gazebo::systems::JointStatePublisher">
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
       <topic>joint_states</topic>
     </plugin>
-    <plugin filename="ignition-gazebo-ackermann-steering-system" name="ignition::gazebo::systems::AckermannSteering">
+    <plugin filename="gz-sim-ackermann-steering-system" name="gz::sim::systems::AckermannSteering">
       <left_joint>rear_left_wheel_joint</left_joint>
       <right_joint>rear_right_wheel_joint</right_joint>
       <left_steering_joint>front_left_steering_joint</left_steering_joint>
@@ -286,12 +286,12 @@
       <publish_wheel_tf>true</publish_wheel_tf>
       <publish_wheel_joint_state>true</publish_wheel_joint_state>
     </plugin>
-    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
-    <plugin filename="ignition-gazebo-imu-system" name="ignition::gazebo::systems::Imu">
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu">
   </plugin>
-    <plugin filename="ignition-gazebo-navsat-system" name="ignition::gazebo::systems::NavSat">
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat">
   </plugin>
   </gazebo>
   <gazebo reference="camera_link">
@@ -318,7 +318,7 @@
       <pose>0 0 0 0 0 0</pose>
       <topic>/scan</topic>
       <update_rate>10</update_rate>
-      <ignition_frame_id>lidar_link</ignition_frame_id>
+      <gz_frame_id>lidar_link</gz_frame_id>
       <ray>
         <scan>
           <horizontal>

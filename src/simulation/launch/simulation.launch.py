@@ -4,10 +4,8 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 import xacro
 
-# Gazebo and the ROS <-> Gazebo bridge are not launched here. Ignition Fortress
-# is unavailable on Nix, so it runs in a container started separately via
-# src/simulation/scripts/run_simulator.sh, and reaches these nodes over DDS.
-
+# Gazebo and the ROS <-> Gazebo bridge are started
+# separately via src/simulation/scripts/run_simulator.sh.
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("simulation")

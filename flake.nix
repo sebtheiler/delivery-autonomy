@@ -2,7 +2,6 @@
   description = "Delivery";
   inputs = {
     nix-ros-overlay.url = "github:lopsided98/nix-ros-overlay/develop";
-    # need to use develop since ros-gz-bridge is not yet available on master
     nixpkgs.follows = "nix-ros-overlay/nixpkgs";
     nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
   };
@@ -21,8 +20,8 @@
           config.allowUnfree = true;
         };
 
-        # Pull the specific Python interpreter ROS Humble is using
-        pythonWithPackages = pkgs.rosPackages.${rosDistro}.python.withPackages (p: with p; [
+        # Pull the specific Python interpreter ROS is using
+        pythonWithPackages = pkgs.rosPackages.${rosDistro}.python3.withPackages (p: with p; [
           numpy
           scipy
           opencv4
@@ -33,7 +32,7 @@
           optax
         ]);
 
-        rosDistro = "humble";
+        rosDistro = "lyrical";
       in {
         devShells.default = pkgs.mkShell {
           name = "Delivery";
@@ -59,11 +58,13 @@
                 joy-teleop
                 ros-gz-bridge
                 ros-gz-interfaces
+                ros-gz-sim
+                gz-sim-vendor
+                gz-tools-vendor
                 xacro
                 teleop-twist-keyboard
                 robot-state-publisher
                 foxglove-bridge
-                ros-ign-bridge
                 tf2-tools
               ];
             })
@@ -73,8 +74,5 @@
   nixConfig = {
     extra-substituters = [ "https://ros.cachix.org" ];
     extra-trusted-public-keys = [ "ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo=" ];
-    permittedInsecurePackages = [
-      "freeimage-3.18.0-unstable-2024-04-18"
-    ];
   };
 }

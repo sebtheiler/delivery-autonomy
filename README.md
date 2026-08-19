@@ -1,6 +1,6 @@
 # Delivery
 
-A delivery robot that drives to a given point on the WashU Danforth campus.
+Demo delivery robot that drives to a given point on the east-end of WashU campus.
 
 The robot uses Ackermann steering. It finds its position with an Extended Kalman
 Filter. The filter mixes GPS, IMU, and wheel encoder data. A global planner makes
@@ -19,17 +19,14 @@ Edit the Org source in `docs/`, then tangle it again. The Org files are these:
 | `20260314170540-model_predictive_path_integral.org` | `autonomy/algorithms/mppi.py` |
 
 The `src/simulation` package is not generated. Edit it directly.
+	
+## Requirements
 
-## Before you start
+The project only requires Nix with flakes. Nothing additional needs to be installed.
+Support for legacy distros that do not have Nix installed (e.g., Arch, Ubuntu)
+is not guaranteed, to try at your own risk.
 
-You must have Nix with flakes. All ROS 2 packages and Python packages come from
-the flake. You do not install them.
-
-The simulator is not in the flake, because Gazebo is not packaged for Nix. The
-simulator runs in a container. To make the container, obey the instructions in
-`AGENTS.md`. You do this one time only.
-
-## Procedure
+## Set-up
 
 ### 1. Build the workspace
 
@@ -48,16 +45,16 @@ source install/setup.bash
 
 ### 2. Start the simulator
 
-The simulator starts Gazebo and the bridge to ROS 2. Start it in the container:
+The simulator starts Gazebo and the bridge to ROS 2. Start it in the devshell:
 
 ```sh
-distrobox enter gazebo-fortress -- src/simulation/scripts/run_simulator.sh
+src/simulation/scripts/run_simulator.sh
 ```
 
 Set `HEADLESS=1` before the command if you do not want the Gazebo window. Do this
 for automatic tests.
 
-The simulator is ready when the log shows 14 bridges.
+The simulator is ready when the log shows 12 bridges.
 
 ### 3. Start the ROS 2 nodes
 
@@ -110,8 +107,7 @@ The robot drives to the goal. To see the result, do one or more of these:
   ros2 topic echo /ground_truth/odom --once
   ```
 
-The controller stops the robot when it is nearer than 0.25 m to the goal, and its
-heading is nearer than 0.15 rad to the goal heading.
+The controller stops the robot when it is close to the goal.
 
 ## Limits
 
@@ -119,6 +115,4 @@ heading is nearer than 0.15 rad to the goal heading.
   the `odom` frame is a constant. State estimation makes its origin at the first
   GPS position it receives. If you move the robot and then start the autonomy
   stack again, all positions are wrong by the distance you moved it.
-- If you drive the robot forward from the spawn point for more than approximately
-  76 m, it hits a building.
-- The camera and the LiDAR make data, but no node reads that data.
+- The camera and the LiDAR make data, but no node reads that data yet.
