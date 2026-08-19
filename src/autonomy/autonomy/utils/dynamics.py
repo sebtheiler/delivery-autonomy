@@ -14,18 +14,26 @@ def dynamics_model(state: jnp.ndarray, inputs: jnp.ndarray, dt: float) -> jnp.nd
     x, y, theta, v, omega, b_omega = state
     v_cmd, delta_cmd = inputs
 
-    desired_accel = (v_cmd - v) / DRIVE_TAU
-    actual_accel = jnp.clip(desired_accel, -MAX_ACCEL, MAX_ACCEL)
-    next_v = v + actual_accel * dt
+    # Closed form acceleration
+    v_gap = v_cmd - v
+    accel = jnp.clip(v_gap / DRIVE_TAU, -MAX_ACCEL, MAX_ACCEL)
+
+    # Time spent at full acceleration before the
+    # remaining gap is small enough
+    t_clipped = jnp.clip(
+        (jnp.abs(v_gap) - MAX_ACCEL * DRIVE_TAU) / MAX_ACCEL, 0.0, dt)
+    next_v = (v + accel * t_clipped
+              + (v_gap - accel * t_clipped)
+              * (1.0 - jnp.exp(-(dt - t_clipped) / DRIVE_TAU)))
 
     # Recover the steering angle implied by the current yaw rate, holding the
     # sign through the zero crossing to avoid a singularity
     safe_v = jnp.where(jnp.abs(v) < 1e-5, jnp.sign(v + 1e-10) * 1e-5, v)
     current_delta = jnp.arctan((omega * WHEELBASE) / safe_v)
 
-    # The lag belongs to the steering rack, not the chassis yaw
     delta_cmd = jnp.clip(delta_cmd, -MAX_STEER, MAX_STEER)
-    next_delta = current_delta + ((delta_cmd - current_delta) / STEER_TAU) * dt
+    # closed form
+    next_delta = delta_cmd + (current_delta - delta_cmd) * jnp.exp(-dt / STEER_TAU)
 
     next_omega = (next_v / WHEELBASE) * jnp.tan(next_delta)
 

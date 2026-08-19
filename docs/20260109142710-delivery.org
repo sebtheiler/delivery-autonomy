@@ -135,6 +135,8 @@ $$\dot{x} = \begin{bmatrix} v \cos \theta \\ v \sin \theta \\ \omega \\ \frac{v_
 
 for some motor constant $\tau$ and wheelbase $L$. Motor acceleration is essentially implemented as a [[id:83df04af-302f-4e73-9c06-f0a4fa46f17f][Low Pass Filter]]. The $b_{\omega}$ term is introduced to measure the bias of the IMU.
 
+Euler is only stable for a DT of $< 2\tau \approx 0.02$ seconds, but MPPI and the EKF predict over longer horizons, which amplifies error and explodes the state. We therefore use the closed-form update, which is stable for any DT.
+
 #+begin_src python :noweb yes :tangle ../src/autonomy/autonomy/utils/dynamics.py
 import jax
 import jax.numpy as jnp
@@ -152,18 +154,26 @@ def dynamics_model(state: jnp.ndarray, inputs: jnp.ndarray, dt: float) -> jnp.nd
     x, y, theta, v, omega, b_omega = state
     v_cmd, delta_cmd = inputs
 
-    desired_accel = (v_cmd - v) / DRIVE_TAU
-    actual_accel = jnp.clip(desired_accel, -MAX_ACCEL, MAX_ACCEL)
-    next_v = v + actual_accel * dt
+    # Closed form acceleration
+    v_gap = v_cmd - v
+    accel = jnp.clip(v_gap / DRIVE_TAU, -MAX_ACCEL, MAX_ACCEL)
+
+    # Time spent at full acceleration before the
+    # remaining gap is small enough
+    t_clipped = jnp.clip(
+        (jnp.abs(v_gap) - MAX_ACCEL * DRIVE_TAU) / MAX_ACCEL, 0.0, dt)
+    next_v = (v + accel * t_clipped
+              + (v_gap - accel * t_clipped)
+              ,* (1.0 - jnp.exp(-(dt - t_clipped) / DRIVE_TAU)))
 
     # Recover the steering angle implied by the current yaw rate, holding the
     # sign through the zero crossing to avoid a singularity
     safe_v = jnp.where(jnp.abs(v) < 1e-5, jnp.sign(v + 1e-10) * 1e-5, v)
     current_delta = jnp.arctan((omega * WHEELBASE) / safe_v)
 
-    # The lag belongs to the steering rack, not the chassis yaw
     delta_cmd = jnp.clip(delta_cmd, -MAX_STEER, MAX_STEER)
-    next_delta = current_delta + ((delta_cmd - current_delta) / STEER_TAU) * dt
+    # closed form
+    next_delta = delta_cmd + (current_delta - delta_cmd) * jnp.exp(-dt / STEER_TAU)
 
     next_omega = (next_v / WHEELBASE) * jnp.tan(next_delta)
 
@@ -535,6 +545,7 @@ def main_loop(self):
     odom.pose.pose.position.y = x[1].item()
     odom.pose.pose.orientation = rpy_to_quaternion(0, 0, x[2].item())
     odom.twist.twist.linear.x = x[3].item()
+    odom.twist.twist.angular.z = x[4].item()
 
     self.state_pub.publish(odom)
 
@@ -1039,9 +1050,10 @@ def publish_command(self, u):
 def execute_callback(self, goal_handle):
     self.get_logger().info('Received a new path to follow!')
 
-    self.active_goal = True
-    self.current_path = process_path(goal_handle.request.path)
+    path = process_path(goal_handle.request.path)
+    self.current_path = path
     self.progress_idx = 0
+    self.active_goal = True
 
     # Block this callback until the timer thread marks it done
     while self.active_goal and rclpy.ok():
@@ -1056,7 +1068,7 @@ Note that the wheelbase used to emit a command is /not/ the one the dynamics mod
 
 #+name: control_vars
 #+begin_src python
-self.T = 30 # TODO: make param
+self.T = 50 # TODO: make param
 self.steering_wheel_base = 0.5  # Must match <wheel_base> in robot.urdf.xacro
 self.dt = 0.1
 self.rng = jax.random.PRNGKey(42)

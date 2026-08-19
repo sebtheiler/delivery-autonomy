@@ -55,7 +55,7 @@ class ControllerActionServer(Node):
             Twist, "/cmd_vel", 10
         )
 
-        self.T = 30 # TODO: make param
+        self.T = 50 # TODO: make param
         self.steering_wheel_base = 0.5  # Must match <wheel_base> in robot.urdf.xacro
         self.dt = 0.1
         self.rng = jax.random.PRNGKey(42)
@@ -124,9 +124,10 @@ class ControllerActionServer(Node):
     def execute_callback(self, goal_handle):
         self.get_logger().info('Received a new path to follow!')
     
-        self.active_goal = True
-        self.current_path = process_path(goal_handle.request.path)
+        path = process_path(goal_handle.request.path)
+        self.current_path = path
         self.progress_idx = 0
+        self.active_goal = True
     
         # Block this callback until the timer thread marks it done
         while self.active_goal and rclpy.ok():

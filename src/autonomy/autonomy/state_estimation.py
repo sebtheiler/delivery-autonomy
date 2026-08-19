@@ -164,6 +164,7 @@ class DeliveryStateEstimationNode(Node):
         odom.pose.pose.position.y = x[1].item()
         odom.pose.pose.orientation = rpy_to_quaternion(0, 0, x[2].item())
         odom.twist.twist.linear.x = x[3].item()
+        odom.twist.twist.angular.z = x[4].item()
     
         self.state_pub.publish(odom)
     

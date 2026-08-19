@@ -19,12 +19,14 @@ def generate_launch_description():
         parameters=[sim_time_param]
     )
 
-    # The robot boots up at global (-80, 20, 2), so the odom origin is offset by that amount
+    # The odom frame origin is the robot's first GPS fix, i.e. the spawn pose in
+    # run_simulator.sh. Keep this in sync with that script or every downstream
+    # frame inherits the difference as a constant lateral offset.
     static_tf_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='map_to_odom_broadcaster',
-        arguments=['--x', '-93.5', '--y', '25.5', '--z', '2', '--roll', '0', '--pitch', '0', '--yaw', '0', '--frame-id', 'map', '--child-frame-id', 'odom'],
+        arguments=['--x', '-95.0', '--y', '25.5', '--z', '2', '--roll', '0', '--pitch', '0', '--yaw', '0', '--frame-id', 'map', '--child-frame-id', 'odom'],
         parameters=[sim_time_param]
     )
 
