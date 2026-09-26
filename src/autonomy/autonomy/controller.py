@@ -10,7 +10,7 @@ from autonomy.utils.mppi_step import mppi_step
 from autonomy.utils.dynamics import dynamics_model
 import time
 from tf2_ros import Buffer, TransformListener, TransformException
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.task import Future
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 import os
@@ -67,38 +67,40 @@ class ControllerActionServer(Node):
         
         self.progress_idx = 0
         self.last_u = None
+        self._goal_done = None
+        self._map_to_odom = None
 
         self.get_logger().info('Controller Action Server initialized.')
 
     def process_state_callback(self, odom_msg: Odometry):
         try:
-            t = self.tf_buffer.lookup_transform(
-                'map',
-                'base_link',
-                odom_msg.header.stamp, # Sync with the velocity measurement
-                rclpy.duration.Duration(seconds=0.1) # Small timeout
+            t = self.tf_buffer.lookup_transform('map', odom_msg.header.frame_id, rclpy.time.Time())
+            q = t.transform.rotation
+            self._map_to_odom = (
+                t.transform.translation.x,
+                t.transform.translation.y,
+                np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y**2 + q.z**2)),
             )
         except TransformException as ex:
-            self.get_logger().warning(f'Could not transform map to base_link: {ex}')
-            return None
+            if self._map_to_odom is None:
+                self.get_logger().warning(
+                    f'No map->{odom_msg.header.frame_id} transform yet: {ex}', throttle_duration_sec=2.0)
+                return None
+        map_x, map_y, map_yaw = self._map_to_odom
     
-        # Extract Position in Map frame
-        x = t.transform.translation.x
-        y = t.transform.translation.y
-        
-        # Extract Yaw (theta) in Map frame
-        q = t.transform.rotation
-        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1.0 - 2.0 * (q.y**2 + q.z**2)
-        theta = np.arctan2(siny_cosp, cosy_cosp)
-        
+        # Extract Position and Yaw (theta) in Map frame
+        p = odom_msg.pose.pose.position
+        q = odom_msg.pose.pose.orientation
+        c, s = np.cos(map_yaw), np.sin(map_yaw)
+        x = map_x + c * p.x - s * p.y
+        y = map_y + s * p.x + c * p.y
+        theta = map_yaw + np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y**2 + q.z**2))
+    
         v = odom_msg.twist.twist.linear.x
         omega = odom_msg.twist.twist.angular.z
     
         # TODO: get this somehow
         b_omega = 0
-    
-        # self.get_logger().info(f"({x}, {y}) @ {theta}")
     
         self.current_state = np.array([x, y, theta, v, omega, b_omega])
 
@@ -121,20 +123,28 @@ class ControllerActionServer(Node):
     
         self.cmd_pub.publish(cmd_vel)
 
-    def execute_callback(self, goal_handle):
+    async def execute_callback(self, goal_handle):
         self.get_logger().info('Received a new path to follow!')
     
         path = process_path(goal_handle.request.path)
         self.current_path = path
         self.progress_idx = 0
+        # A goal that arrives mid-run takes over the path and waits on the same completion
+        if self._goal_done is None or self._goal_done.done():
+            self._goal_done = Future()
+        done = self._goal_done
         self.active_goal = True
     
-        # Block this callback until the timer thread marks it done
-        while self.active_goal and rclpy.ok():
-            time.sleep(0.05)
+        # Wait without blocking the single-threaded executor; the control loop resolves it
+        await done
     
         goal_handle.succeed()
         return FollowPath.Result(success=True)
+    
+    def _finish_goal(self):
+        self.active_goal = False
+        if self._goal_done is not None and not self._goal_done.done():
+            self._goal_done.set_result(True)
 
     def control_loop_callback(self):
         if not self.active_goal or self.current_state is None:
@@ -145,7 +155,7 @@ class ControllerActionServer(Node):
         if len(path_xy) == 0:
             self.get_logger().warning("Received empty path. Stopping robot.")
             self.publish_command(jnp.zeros(INPUT_DIMENSION)) 
-            self.active_goal = False
+            self._finish_goal()
             return
     
         # doesn't have to be calculated every step but minimal overhead
@@ -161,16 +171,16 @@ class ControllerActionServer(Node):
         curr_x, curr_y = self.current_state[0], self.current_state[1]
         curr_theta = self.current_state[2]
         
-        # 3. Calculate errors
+        # Calculate errors
         dist_to_goal = np.hypot(goal_x - curr_x, goal_y - curr_y)
         yaw_err = abs((curr_theta - goal_theta + np.pi) % (2 * np.pi) - np.pi)
         
-        # 4. Check termination condition
+        # Check termination condition
         if dist_to_goal < xy_goal_tolerance and yaw_err < yaw_goal_tolerance:
             # Stop the motors
             self.publish_command(np.zeros(INPUT_DIMENSION)) 
         
-            self.active_goal = False
+            self._finish_goal()
             return
     
         # Optimise from where the robot will be once this solve finishes, not where
@@ -217,11 +227,11 @@ def main(args=None):
     rclpy.init(args=args)
     node = ControllerActionServer()
 
-    # Use a multi-threaded executor so callbacks can run in parallel
-    executor = MultiThreadedExecutor()
-    
+    # Single-threaded on purpose: a MultiThreadedExecutor under ~100 Hz odometry plus /tf
+    # (and the sim's /clock) starves the 10 Hz control timer on the GIL. The action callback
+    # is async, so it does not need a thread of its own.
     try:
-        rclpy.spin(node, executor=executor)
+        rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
