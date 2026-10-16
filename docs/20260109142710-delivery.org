@@ -3022,6 +3022,12 @@ python behavior.py 1282043935
 
 #+begin_src python :noweb yes :tangle ../src/autonomy/autonomy/behavior.py
 import sys
+import csv
+import math
+import os
+import time
+from datetime import datetime, timezone
+
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -3032,6 +3038,60 @@ class BehaviorNode(Node):
         super().__init__('behavior_node')
         self.planner_client = ActionClient(self, ComputePath, '/compute_shortest_path')
         self.controller_client = ActionClient(self, FollowPath, '/follow_path')
+        self.metrics_path = os.environ.get(
+            'DELIVERY_METRICS_PATH',
+            'delivery_metrics.csv',
+        )
+
+    def path_length(self, path):
+        total = 0.0
+
+        for first, second in zip(path.poses, path.poses[1:]):
+            dx = second.pose.position.x - first.pose.position.x
+            dy = second.pose.position.y - first.pose.position.y
+            total += math.hypot(dx, dy)
+
+        return total
+
+    def record_metrics(
+        self,
+        target_node_id,
+        predicted_seconds,
+        actual_seconds,
+        success,
+    ):
+        file_exists = os.path.exists(self.metrics_path)
+
+        with open(self.metrics_path, 'a', newline='') as file:
+            writer = csv.writer(file)
+
+            if not file_exists:
+                writer.writerow([
+                    'timestamp',
+                    'goal_node_id',
+                    'predicted_seconds',
+                    'actual_seconds',
+                    'error_seconds',
+                    'percent_error',
+                    'success',
+                ])
+
+            error_seconds = actual_seconds - predicted_seconds
+            percent_error = (
+                error_seconds / predicted_seconds * 100
+                if predicted_seconds > 0
+                else 0.0
+            )
+
+            writer.writerow([
+                datetime.now(timezone.utc).isoformat(),
+                target_node_id,
+                f'{predicted_seconds:.3f}',
+                f'{actual_seconds:.3f}',
+                f'{error_seconds:.3f}',
+                f'{percent_error:.2f}',
+                success,
+            ])
 
     def plan_and_move(self, target_node_id):
         # Block and wait for the path
@@ -3054,14 +3114,55 @@ class BehaviorNode(Node):
         
         computed_path = result_future.result().result.path
 
+        # Estimate travel time using the controller's target speed.
+        path_distance = self.path_length(computed_path)
+        target_speed = 1.5
+        predicted_seconds = path_distance / target_speed
+
+        self.get_logger().info(
+            f'Predicted travel time: {predicted_seconds:.2f} seconds'
+        )
+
         # Send the path to the controller
         self.get_logger().info('Path received! Connecting to controller...')
         self.controller_client.wait_for_server()
 
         follow_msg = FollowPath.Goal(path=computed_path)
-        
-        self.controller_client.send_goal_async(follow_msg)
-        self.get_logger().info('Execution command sent.')
+
+        start_time = time.perf_counter()
+
+        send_goal_future = self.controller_client.send_goal_async(follow_msg)
+        rclpy.spin_until_future_complete(self, send_goal_future)
+
+        controller_goal_handle = send_goal_future.result()
+
+        if not controller_goal_handle.accepted:
+            self.get_logger().error('Controller rejected the path.')
+            self.record_metrics(
+                target_node_id,
+                predicted_seconds,
+                0.0,
+                False,
+            )
+            return
+
+        result_future = controller_goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self, result_future)
+
+        actual_seconds = time.perf_counter() - start_time
+        controller_result = result_future.result().result
+        success = controller_result.success
+
+        self.record_metrics(
+            target_node_id,
+            predicted_seconds,
+            actual_seconds,
+            success,
+        )
+
+        self.get_logger().info(
+            f'Actual travel time: {actual_seconds:.2f} seconds'
+        )
 
 def main(args=None):
     # Parse the command line argument

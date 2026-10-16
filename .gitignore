@@ -25,3 +25,9 @@ washu_engineering_paths.png
 
 .agent-shell/
 docs/ltximg
+
+# Local traversal records and synthetic demo outputs
+*.sqlite3
+*.sqlite3-*
+delivery_metrics.csv
+tools/large_dataset/
