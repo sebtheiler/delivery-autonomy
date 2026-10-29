@@ -19,6 +19,7 @@ from autonomy.utils.dynamics import VEHICLE_PARAMS, Vehicle, dynamics_model, veh
 from autonomy.utils.costmap_speed import (
     GOVERNOR_PARAMS, OBSTACLE_MEMORY, Costmap, end_taper_speed, governor_param_problem, path_ahead,
     path_progress, remembered_costmap, speed_limit)
+from autonomy.utils.goal_end import goal_end
 import time
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.task import Future
@@ -251,27 +252,18 @@ class ControllerActionServer(Node):
     
         path_xy, path_theta_unwrapped, path_s = self.current_path
     
-        # doesn't have to be calculated every step but minimal overhead
-        goal_x, goal_y = path_xy[-1]
-        goal_theta = path_theta_unwrapped[-1]
-    
         V_TARGET = self.max_speed
     
-        # Assuming state is [x, y, theta, v, omega, b_omega]
-        curr_x, curr_y = self.current_state[0], self.current_state[1]
-        curr_theta = self.current_state[2]
-        
-        # Calculate errors
-        dist_to_goal = np.hypot(goal_x - curr_x, goal_y - curr_y)
-        yaw_err = abs((curr_theta - goal_theta + np.pi) % (2 * np.pi) - np.pi)
-        
-        # Check termination condition
-        if dist_to_goal < self.xy_goal_tolerance and yaw_err < self.yaw_goal_tolerance:
+        # Inside the tolerances, or at the end of the path (see Check Termination)
+        end = goal_end(self.current_state, path_xy, path_theta_unwrapped, path_s, self.progress_idx,
+                       self.xy_goal_tolerance, self.yaw_goal_tolerance)
+        if end is not None:
             # Stop the motors
             self.publish_command(np.zeros(INPUT_DIMENSION))
         
             self.active_goal = False
-            self._finish_goal(reached=True)
+            (self.get_logger().info if end.reached else self.get_logger().warning)(end.message())
+            self._finish_goal(reached=end.reached)
             return
     
         # Optimise from where the robot will be once this solve finishes, not where

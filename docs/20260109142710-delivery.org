@@ -1220,6 +1220,7 @@ from autonomy.utils.dynamics import VEHICLE_PARAMS, Vehicle, dynamics_model, veh
 from autonomy.utils.costmap_speed import (
     GOVERNOR_PARAMS, OBSTACLE_MEMORY, Costmap, end_taper_speed, governor_param_problem, path_ahead,
     path_progress, remembered_costmap, speed_limit)
+from autonomy.utils.goal_end import goal_end
 import time
 from tf2_ros import Buffer, TransformListener, TransformException
 from rclpy.task import Future
@@ -1316,7 +1317,7 @@ os.environ.setdefault("OMP_NUM_THREADS", "2")
 #+end_src
 
 ** Action
-A path is followed until the robot is within the goal tolerances of its last pose. Then the goal succeeds with =success= true. Only the newest goal is ever open. A goal that arrives while another is running takes over the path, and the replaced goal finishes at once, *aborted* with =success= false. ROS 2 actions have no "preempted" status, and Nav2's own servers abort a goal they preempt, so clients get the same answer here. =local_planner= replans about once a second; before this change every one of those goals stayed open until the robot arrived. An empty path is an order to stop. The controller zeroes the command at once and the empty goal itself succeeds.
+A path is followed until the robot is within the goal tolerances of its last pose, or until it reaches the end of the path (see [[*Check Termination][Check Termination]]). Inside the tolerances the goal succeeds with =success= true. At the end of the path it succeeds within =xy_goal_tolerance= and is aborted beyond it. Either way the robot stops. Only the newest goal is ever open. A goal that arrives while another is running takes over the path, and the replaced goal finishes at once, *aborted* with =success= false. ROS 2 actions have no "preempted" status, and Nav2's own servers abort a goal they preempt, so clients get the same answer here. =local_planner= replans about once a second; before this change every one of those goals stayed open until the robot arrived. An empty path is an order to stop. The controller zeroes the command at once and the empty goal itself succeeds.
 
 # The file source type is arbitrary for Emacs here.
 #+begin_src bash :tangle ../src/shared_types/action/FollowPath.action
@@ -1423,12 +1424,12 @@ def process_costmap_callback(self, msg: OccupancyGrid):
 ** Parameters
 Speed and goal tolerances are ROS parameters. Their defaults are the values this controller always used.
 
-| Parameter            | Default | Meaning                                                                   |
-|----------------------+---------+---------------------------------------------------------------------------|
-| =max_speed=          |     1.5 | m/s. The cruise speed MPPI tracks, and the forward cap on =/cmd_vel=.     |
-| =min_speed=          |    -0.5 | m/s. The reverse cap on =/cmd_vel=. 0 forbids reversing.                  |
-| =xy_goal_tolerance=  |    0.25 | m. How close to the end of the path counts as arrived.                    |
-| =yaw_goal_tolerance= |    0.15 | rad. How closely the heading has to match the end of the path.            |
+| Parameter            | Default | Meaning                                                                                                    |
+|----------------------+---------+------------------------------------------------------------------------------------------------------------|
+| =max_speed=          |     1.5 | m/s. The cruise speed MPPI tracks, and the forward cap on =/cmd_vel=.                                      |
+| =min_speed=          |    -0.5 | m/s. The reverse cap on =/cmd_vel=. 0 forbids reversing.                                                   |
+| =xy_goal_tolerance=  |    0.25 | m. How close to the end of the path counts as arrived.                                                     |
+| =yaw_goal_tolerance= |    0.15 | rad. How closely the heading has to match the end of the path to stop short of it. π or more: any heading. |
 
 The obstacle speed limit (see [[*Obstacle Speed Limit][Obstacle Speed Limit]]) and the braking for the end of the path have their own:
 
@@ -1671,10 +1672,6 @@ def control_loop_callback(self):
 
     path_xy, path_theta_unwrapped, path_s = self.current_path
 
-    # doesn't have to be calculated every step but minimal overhead
-    goal_x, goal_y = path_xy[-1]
-    goal_theta = path_theta_unwrapped[-1]
-
     V_TARGET = self.max_speed
 
     <<check_control_done>>
@@ -1744,26 +1741,372 @@ def control_loop_callback(self):
 #+end_src
 
 *** Check Termination
-The check uses the pose the EKF gives it, so it can only be as close as the EKF is right. In TDM-25's sim runs the robot stopped 0.43-0.50 m from the goal node by ground truth. The EKF put it 0.22 m away, inside the 0.25 m tolerance, so this check did its job. The gap is EKF error: about 0.15 m of lag at speed plus a 0.25 m offset. The robot also arrives at full speed and coasts about 0.4 m after the zero command, so it ends level with or past the goal, not short of it. A tighter tolerance would fix neither. Slowing down before the end of the path would shorten the coast.
+A goal ends in one of two ways, decided by =goal_end= from the pose the EKF gives the controller:
+
+1. *Inside the tolerances.* The robot is within =xy_goal_tolerance= of the last point of the path, and its heading within =yaw_goal_tolerance= of the path's there. The goal succeeds. A =yaw_goal_tolerance= of π or more turns the heading check off.
+2. *At the end of the path.* The robot is abeam of the last point of the path, or past it. The goal succeeds within =xy_goal_tolerance=, whatever the heading, and is aborted beyond it.
+
+Either way the controller sends a zero command and logs where the robot stopped: at info level when the goal succeeds, as a warning when it is aborted.
+
+Before the second rule, a robot that missed the tolerances was never stopped. Past the end of the path nothing brings it back. The end taper never asks for less than =goal_creep_speed= ([[*End of Path][End of Path]]), and MPPI's cost has no along-track term, so it drives straight on along the final heading. With =min_speed= 0, as on the robot, it cannot back up either. In the Pi test of 2026-10-24 the robot drove past its goal and kept going. The replay below shows how: with an RTK float pose (20 cm, 3°) or a 12° IMU yaw bias, the robot passes the goal just outside the tolerances, and before this rule it then drove on for as long as the replay ran, 8 m and more.
+
+The end is found from the arc length to the end of the path, with =path_progress= ([[*End of Path][End of Path]]). Its projection is clamped to the path, so the arc left is exactly 0 once the robot is abeam of the last point or past it. The current pose is used, not the one predicted for the end of the solve, so the robot really is there. The rule never asks which side of the line through the goal the robot is on: a route that doubles back has whole stretches beyond that line, a long way from its end. A path of a single point has no direction, so only the tolerances can end it.
+
+The check can only be as close as the EKF is right. In TDM-25's sim runs the robot stopped 0.43-0.50 m from the goal node by ground truth, while the EKF put it 0.22 m away. A tighter tolerance would not change that.
 
 #+name: check_control_done
 #+begin_src python
-# Assuming state is [x, y, theta, v, omega, b_omega]
-curr_x, curr_y = self.current_state[0], self.current_state[1]
-curr_theta = self.current_state[2]
-
-# Calculate errors
-dist_to_goal = np.hypot(goal_x - curr_x, goal_y - curr_y)
-yaw_err = abs((curr_theta - goal_theta + np.pi) % (2 * np.pi) - np.pi)
-
-# Check termination condition
-if dist_to_goal < self.xy_goal_tolerance and yaw_err < self.yaw_goal_tolerance:
+# Inside the tolerances, or at the end of the path (see Check Termination)
+end = goal_end(self.current_state, path_xy, path_theta_unwrapped, path_s, self.progress_idx,
+               self.xy_goal_tolerance, self.yaw_goal_tolerance)
+if end is not None:
     # Stop the motors
     self.publish_command(np.zeros(INPUT_DIMENSION))
 
     self.active_goal = False
-    self._finish_goal(reached=True)
+    (self.get_logger().info if end.reached else self.get_logger().warning)(end.message())
+    self._finish_goal(reached=end.reached)
     return
+#+end_src
+
+The decision is a plain function, so the tests and the replay run the same code as the controller.
+
+#+begin_src python :tangle ../src/autonomy/autonomy/utils/goal_end.py
+"""When the controller ends a goal: inside the goal tolerances, or at the end of the path."""
+import math
+from typing import NamedTuple
+
+from autonomy.utils.costmap_speed import path_progress
+
+# m of arc left that counts as the end of the path. path_progress clamps its projection to the
+# path, so abeam of the last point or past it the arc left is 0
+AT_PATH_END = 1e-3
+
+
+class GoalEnd(NamedTuple):
+    reached: bool       # the goal succeeds (True) or is aborted (False)
+    at_path_end: bool   # it ended because the robot reached the end of the path
+    distance: float     # m from the robot to the last point of the path
+    yaw_error: float    # rad between the robot's heading and the path's at its last point
+
+    def message(self):
+        """The line the controller logs."""
+        heading = f'heading off by {math.degrees(self.yaw_error):.1f} deg'
+        if not self.at_path_end:
+            return f'Goal reached {self.distance:.2f} m from the goal, {heading}: stopping'
+        if self.reached:
+            return (f'Reached the end of the path {self.distance:.2f} m from the goal, {heading}: '
+                    f'stopping, goal reached')
+        return (f'Passed the end of the path {self.distance:.2f} m from the goal, {heading}: '
+                f'stopping, goal aborted')
+
+
+def goal_end(state, path_xy, path_theta, path_s, start_idx, xy_tolerance, yaw_tolerance):
+    """How the goal ends with the robot at `state` (x, y, yaw first), or None while it goes on.
+
+    Within xy_tolerance of the last point of the path, heading within yaw_tolerance of the
+    path's there (any heading when yaw_tolerance >= pi): reached. Abeam of the last point or
+    past it: reached within xy_tolerance whatever the heading, aborted beyond it. Like
+    path_progress, the robot is looked for along the path from `start_idx` on."""
+    x, y, yaw = (float(value) for value in state[:3])
+    goal_x, goal_y = path_xy[-1]
+    distance = math.hypot(goal_x - x, goal_y - y)
+    yaw_error = abs((yaw - float(path_theta[-1]) + math.pi) % (2 * math.pi) - math.pi)
+    if distance < xy_tolerance and (yaw_tolerance >= math.pi or yaw_error < yaw_tolerance):
+        return GoalEnd(True, False, distance, yaw_error)
+    if len(path_xy) >= 2 and path_s[-1] - path_progress(state, path_xy, path_s, start_idx) <= AT_PATH_END:
+        return GoalEnd(distance <= xy_tolerance, True, distance, yaw_error)
+    return None
+#+end_src
+
+#+begin_src python :tangle ../src/autonomy/test/test_goal_end.py :mkdirp yes
+import math
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from autonomy.controller import CONTROLLER_PARAMS, controller_param_problem
+from autonomy.utils.goal_end import goal_end
+from autonomy.utils.reference_trajectory import process_path
+
+
+def path_tdm43(points):
+    """The controller's (xy, unwrapped heading, arc length) for a path through `points`."""
+    return process_path(SimpleNamespace(poses=[
+        SimpleNamespace(pose=SimpleNamespace(position=SimpleNamespace(x=x, y=y))) for x, y in points]))
+
+
+def straight_tdm43(length=6.0):
+    """East from the origin, a point every 0.1 m."""
+    return path_tdm43([(s, 0.0) for s in np.arange(0.0, length + 1e-9, 0.1)])
+
+
+def end_tdm43(path, x, y, yaw, start_idx=None, yaw_tolerance=0.15):
+    """goal_end for a robot at (x, y) heading yaw. The robot is looked for from start_idx on, by
+    default a few points behind the nearest, like the controller's progress."""
+    if start_idx is None:
+        start_idx = max(0, int(np.argmin(np.hypot(*(path[0] - (x, y)).T))) - 5)
+    return goal_end(np.array([x, y, yaw, 0.5, 0.0, 0.0]), *path, start_idx, 0.25, yaw_tolerance)
+
+
+def test_inside_both_tolerances_the_goal_is_reached_short_of_the_end():
+    end = end_tdm43(straight_tdm43(), 5.85, 0.05, 0.05)
+    assert end.reached and not end.at_path_end
+    assert end.distance == pytest.approx(math.hypot(0.15, 0.05))
+    assert end.yaw_error == pytest.approx(0.05)
+
+
+def test_at_the_wrong_heading_it_goes_on_to_the_end_of_the_path():
+    path = straight_tdm43()
+    assert end_tdm43(path, 5.85, 0.05, 0.3) is None
+    end = end_tdm43(path, 6.02, 0.05, 0.3)
+    assert end.reached and end.at_path_end
+    assert end.yaw_error == pytest.approx(0.3)
+
+
+def test_a_yaw_tolerance_of_pi_or_more_ignores_the_heading():
+    path = straight_tdm43()
+    for yaw_tolerance in (math.pi, 4.0):
+        for yaw in (0.3, -2.0, math.pi):
+            end = end_tdm43(path, 5.85, 0.05, yaw, yaw_tolerance=yaw_tolerance)
+            assert end.reached and not end.at_path_end, (yaw_tolerance, yaw)
+    assert controller_param_problem(**{**CONTROLLER_PARAMS, 'yaw_goal_tolerance': math.pi}) is None
+
+
+def test_passing_beside_the_goal_ends_it_aborted():
+    # The Pi's failure: 0.27 m to the side with a 12 deg heading error drove on for 8 m
+    path = straight_tdm43()
+    assert end_tdm43(path, 5.95, 0.27, 0.21) is None
+    end = end_tdm43(path, 6.0, 0.27, 0.21)
+    assert not end.reached and end.at_path_end
+    assert end.distance == pytest.approx(0.27)
+
+
+def test_far_past_the_end_it_is_aborted():
+    end = end_tdm43(straight_tdm43(), 8.0, 0.0, 0.0)
+    assert not end.reached and end.at_path_end and end.distance == pytest.approx(2.0)
+
+
+def test_short_of_the_end_and_outside_the_tolerances_it_goes_on():
+    path = straight_tdm43()
+    for x, y in ((3.0, 0.5), (5.7, 0.0), (5.99, 0.6)):
+        assert end_tdm43(path, x, y, 0.0) is None, (x, y)
+
+
+def test_a_route_that_doubles_back_is_not_over_where_it_starts():
+    # 10 m east, a U-turn of radius 1 m, 5 m back west: the goal is (5, 2) heading west, and
+    # the whole first half of the route lies past the line through it
+    east = [(s, 0.0) for s in np.arange(0.0, 10.0, 0.1)]
+    turn = [(10.0 + math.sin(a), 1.0 - math.cos(a)) for a in np.linspace(0.0, math.pi, 32)]
+    west = [(x, 2.0) for x in np.linspace(9.9, 5.0, 50)]
+    path = path_tdm43(east + turn + west)
+    assert end_tdm43(path, 0.0, 0.0, 0.0) is None
+    assert end_tdm43(path, 4.0, 0.0, 0.0, start_idx=35) is None
+    late = len(path[0]) - 20
+    assert end_tdm43(path, 5.5, 2.1, math.pi, start_idx=late) is None
+    end = end_tdm43(path, 4.6, 2.1, math.pi, start_idx=late)
+    assert not end.reached and end.at_path_end and end.distance == pytest.approx(math.hypot(0.4, 0.1))
+
+
+def test_a_single_point_path_ends_only_inside_the_tolerances():
+    path = path_tdm43([(1.0, 1.0)])
+    assert end_tdm43(path, 3.0, 3.0, 0.0) is None
+    assert end_tdm43(path, 1.1, 1.0, 0.0).reached
+
+
+def test_every_end_says_how_far_from_the_goal():
+    path = straight_tdm43()
+    reached = end_tdm43(path, 5.85, 0.05, 0.05).message()
+    at_end = end_tdm43(path, 6.02, 0.05, 0.3).message()
+    missed = end_tdm43(path, 6.0, 0.27, 0.21).message()
+    assert reached == 'Goal reached 0.16 m from the goal, heading off by 2.9 deg: stopping'
+    assert at_end == ('Reached the end of the path 0.05 m from the goal, heading off by 17.2 deg: '
+                      'stopping, goal reached')
+    assert missed == ('Passed the end of the path 0.27 m from the goal, heading off by 12.0 deg: '
+                      'stopping, goal aborted')
+#+end_src
+
+**** Replay
+=test_goal_stop_replay.py= drives the controller's loop in closed loop with the Pi's settings: =max_speed= 1.0, =min_speed= 0 and the robot's wheelbase and steering limit. Each tick does what =control_loop_callback= does without a costmap: =goal_end= on the pose estimate, then the end taper, the reference and the MPPI step from the predicted state. The plant is the controller's own =dynamics_model=, so this is the best case: a perfect model and no latency. Only the pose the controller sees is wrong, by an EKF-like drift and a constant heading bias. The paths are 6 m straight, or 4 m straight and a 90° left turn of 1.5 m radius. Every case has a seed of its own.
+
+Before this change, three of the ten cases never stopped. Now every case ends with the robot stopped, by its estimate no more than 0.40 m from the goal. Distances are to the goal, 1 s after the zero command:
+
+| Case                                | Before (551467a)       | Now: the goal ends           | Estimate (m) | Truth (m) |
+|-------------------------------------+------------------------+------------------------------+--------------+-----------|
+| straight, perfect estimate          | stops at 0.24 m        | reached, inside tolerances   |         0.25 |      0.24 |
+| corner, perfect estimate            | stops at 0.19 m        | reached, inside tolerances   |         0.20 |      0.19 |
+| straight, RTK fixed (3 cm, 1°)      | stops at 0.25 m        | reached, inside tolerances   |         0.25 |      0.25 |
+| corner, RTK fixed (3 cm, 1°)        | stops at 0.23 m        | reached, inside tolerances   |         0.21 |      0.23 |
+| straight, RTK float (20 cm, 3°)     | never: 7.8 m past      | aborted at the end of path   |         0.40 |      0.37 |
+| corner, RTK float (20 cm, 3°)       | stops at 0.24 m        | reached at the end of path   |         0.14 |      0.11 |
+| straight, plain GPS (1 m, 3°)       | stops at 0.93 m        | reached, inside tolerances   |         0.13 |      0.93 |
+| straight, IMU yaw bias 6°           | stops at 0.21 m        | reached, inside tolerances   |         0.21 |      0.21 |
+| straight, IMU yaw bias 12°          | never: 8.3 m past      | aborted at the end of path   |         0.27 |      0.27 |
+| corner, IMU yaw bias 12°            | never: 8.2 m past      | aborted at the end of path   |         0.28 |      0.28 |
+
+The noisy cases depend on their seeds. With other draws, the failures land on other cases: the first version of this replay shared one random stream between all cases, and there the corner with RTK float and the plain GPS case never stopped, while the straight RTK float case did. With plain GPS the robot stops where its estimate puts the goal, 0.93 m from it in truth. Only a better estimate brings it closer, so for position errors above 0.2 m the test checks the estimate alone.
+
+It runs about 30 s, so it is marked =slow=: ~python -m pytest -m "not slow" src/autonomy/test~ leaves it out.
+
+#+begin_src python :tangle ../src/autonomy/test/test_goal_stop_replay.py :mkdirp yes
+"""Closed-loop replay of how the controller ends a goal, with the Pi's settings (TDM-43)."""
+import math
+from types import SimpleNamespace
+from typing import NamedTuple
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from autonomy.utils.costmap_speed import end_taper_speed, path_progress
+from autonomy.utils.dynamics import INPUT_DIMENSION, Vehicle, dynamics_model
+from autonomy.utils.goal_end import goal_end
+from autonomy.utils.mppi_step import charged_steps, free_window, mppi_step
+from autonomy.utils.reference_trajectory import get_local_reference, process_path
+
+pytestmark = pytest.mark.slow
+
+# delivery-robo's hardware.yaml for the controller: forward only, at most 1.0 m/s
+MAX_SPEED_TDM43, MIN_SPEED_TDM43 = 1.0, 0.0
+XY_TOLERANCE_TDM43, YAW_TOLERANCE_TDM43 = 0.25, 0.15
+GOAL_DECEL_TDM43, GOAL_CREEP_TDM43 = 0.8, 0.15
+VEHICLE_TDM43 = Vehicle(wheelbase=0.36322, max_steer_rad=0.4363)
+T_TDM43, DT_TDM43 = 50, 0.1
+REPLAY_S_TDM43 = 60.0
+# m from the goal: within this the robot counts as stopped at it
+STOP_WITHIN_TDM43 = 0.6
+# m: with a position error up to this the true position is checked too. Beyond it the robot
+# stops where its estimate puts the goal, and only a better estimate brings it closer
+TRUTH_CHECKED_TDM43 = 0.2
+
+# name: (path, position error m, heading error deg, heading bias deg). The errors drift
+CASES_TDM43 = {
+    'straight, perfect estimate': ('straight', 0.0, 0.0, 0.0),
+    'corner, perfect estimate': ('corner', 0.0, 0.0, 0.0),
+    'straight, RTK fixed (3 cm, 1 deg)': ('straight', 0.03, 1.0, 0.0),
+    'corner, RTK fixed (3 cm, 1 deg)': ('corner', 0.03, 1.0, 0.0),
+    'straight, RTK float (20 cm, 3 deg)': ('straight', 0.20, 3.0, 0.0),
+    'corner, RTK float (20 cm, 3 deg)': ('corner', 0.20, 3.0, 0.0),
+    'straight, plain GPS (1 m, 3 deg)': ('straight', 1.0, 3.0, 0.0),
+    'straight, IMU yaw bias 6 deg': ('straight', 0.0, 0.0, 6.0),
+    'straight, IMU yaw bias 12 deg': ('straight', 0.0, 0.0, 12.0),
+    'corner, IMU yaw bias 12 deg': ('corner', 0.0, 0.0, 12.0),
+}
+
+
+def path_msg_tdm43(points):
+    return SimpleNamespace(poses=[SimpleNamespace(pose=SimpleNamespace(position=SimpleNamespace(x=x, y=y)))
+                                  for x, y in points])
+
+
+def straight_tdm43(length=6.0, step=0.1):
+    return [(s, 0.0) for s in np.arange(0.0, length + 1e-9, step)]
+
+
+def corner_tdm43(straight_len=4.0, radius=1.5, step=0.1):
+    points = [(s, 0.0) for s in np.arange(0.0, straight_len, step)]
+    n = int(math.ceil(radius * math.pi / 2 / step))
+    for k in range(n + 1):
+        a = -math.pi / 2 + (math.pi / 2) * k / n
+        points.append((straight_len + radius * math.cos(a), radius + radius * math.sin(a)))
+    return points
+
+
+class EstimateErrorTDM43:
+    """Error of the pose the controller sees: a Gauss-Markov drift (like an EKF riding on GPS)
+    plus a constant heading bias (like an IMU yaw offset)."""
+
+    def __init__(self, rng, sigma_xy=0.0, sigma_yaw_deg=0.0, yaw_bias_deg=0.0, tau=3.0):
+        self.rng, self.tau = rng, tau
+        self.sigma = np.array([sigma_xy, sigma_xy, math.radians(sigma_yaw_deg)])
+        self.bias = math.radians(yaw_bias_deg)
+        self.e = self.rng.normal(0.0, 1.0, 3) * self.sigma
+
+    def step(self):
+        a = math.exp(-DT_TDM43 / self.tau)
+        self.e = a * self.e + math.sqrt(1 - a * a) * self.rng.normal(0.0, 1.0, 3) * self.sigma
+        return np.array([self.e[0], self.e[1], self.e[2] + self.bias, 0.0, 0.0, 0.0])
+
+
+class ReplayTDM43(NamedTuple):
+    end: object             # goal_end's answer, None if the goal never ended
+    time: float             # s until the goal ended, or the whole replay
+    end_estimate: float     # m from the goal by the estimate when it ended
+    stop_distance: float    # m from the goal (true position) 1 s after the zero command
+    stop_speed: float       # m/s then
+    closest: float          # m, the closest the robot came to the goal
+    driven_on: float        # m driven after first coming within 0.5 m of the goal
+
+
+def replay_tdm43(points, error, end_check=goal_end, replay_s=REPLAY_S_TDM43):
+    """Follow a path through `points` from the origin as control_loop_callback does (no
+    costmap), the controller seeing the true state plus `error`, until `end_check` ends it."""
+    path_xy, path_theta, path_s = process_path(path_msg_tdm43(points))
+    goal = path_xy[-1]
+    true = np.zeros(6)
+    U_nominal = jnp.zeros((T_TDM43, INPUT_DIMENSION))
+    key = jax.random.PRNGKey(42)
+    progress_idx, last_u = 0, None
+    closest, driven_on, near = math.inf, 0.0, False
+    for tick in range(round(replay_s / DT_TDM43)):
+        estimate = true + error.step()
+        distance = float(np.hypot(*(goal - true[:2])))
+        closest = min(closest, distance)
+        near = near or distance <= 0.5
+        end = end_check(estimate, path_xy, path_theta, path_s, progress_idx,
+                        XY_TOLERANCE_TDM43, YAW_TOLERANCE_TDM43)
+        if end is not None:
+            # The zero command, held for a second
+            for _ in range(10):
+                true = np.asarray(dynamics_model(true, np.zeros(INPUT_DIMENSION), dt=DT_TDM43,
+                                                 vehicle=VEHICLE_TDM43))
+            return ReplayTDM43(end, tick * DT_TDM43, float(np.hypot(*(goal - estimate[:2]))),
+                               float(np.hypot(*(goal - true[:2]))), abs(float(true[3])), closest,
+                               driven_on)
+        future = (dynamics_model(estimate, last_u, dt=DT_TDM43, vehicle=VEHICLE_TDM43)
+                  if last_u is not None else estimate)
+        remaining = path_s[-1] - path_progress(future, path_xy, path_s, progress_idx)
+        v_target = float(min(MAX_SPEED_TDM43, end_taper_speed(remaining, GOAL_DECEL_TDM43, GOAL_CREEP_TDM43)))
+        ref, progress_idx = get_local_reference(future, path_xy, path_theta, path_s, T_TDM43, DT_TDM43,
+                                                v_target=v_target, progress_idx=progress_idx)
+        key, step_key = jax.random.split(key)
+        lower = jnp.array([MIN_SPEED_TDM43, -VEHICLE_TDM43.max_steer_rad])
+        upper = jnp.array([v_target, VEHICLE_TDM43.max_steer_rad])
+        U = mppi_step(key=step_key, x0=future, U_nominal=jnp.clip(U_nominal, lower, upper),
+                      ref_traj=jnp.array(ref), v_target=v_target, lower_bounds=lower,
+                      upper_bounds=upper, window=free_window(),
+                      obstacle_steps=charged_steps(remaining, v_target, T_TDM43), vehicle=VEHICLE_TDM43)
+        U = jnp.clip(U, lower, upper)
+        last_u = np.asarray(U[0])
+        U_nominal = jnp.roll(U, -1, axis=0).at[-1].set(U[-1])
+        before = true
+        true = np.asarray(dynamics_model(true, last_u, dt=DT_TDM43, vehicle=VEHICLE_TDM43))
+        if near:
+            driven_on += float(np.hypot(*(true[:2] - before[:2])))
+    return ReplayTDM43(None, replay_s, math.nan, float(np.hypot(*(goal - true[:2]))),
+                       abs(float(true[3])), closest, driven_on)
+
+
+def replay_case_tdm43(name, end_check=goal_end):
+    shape, sigma_xy, sigma_yaw_deg, yaw_bias_deg = CASES_TDM43[name]
+    points = straight_tdm43() if shape == 'straight' else corner_tdm43()
+    seed = list(CASES_TDM43).index(name)
+    error = EstimateErrorTDM43(np.random.default_rng(seed), sigma_xy, sigma_yaw_deg, yaw_bias_deg)
+    return replay_tdm43(points, error, end_check)
+
+
+@pytest.mark.parametrize('name', list(CASES_TDM43))
+def test_the_robot_stops_at_the_goal(name):
+    result = replay_case_tdm43(name)
+    assert result.end is not None, f'never stopped; closest {result.closest:.2f} m'
+    assert result.stop_speed < 0.01
+    assert result.end_estimate <= STOP_WITHIN_TDM43, result
+    if CASES_TDM43[name][1] <= TRUTH_CHECKED_TDM43:
+        assert result.stop_distance <= STOP_WITHIN_TDM43, result
+    # The goal succeeds exactly when the estimate is within the tolerance
+    assert result.end.reached == (result.end_estimate <= XY_TOLERANCE_TDM43), result
 #+end_src
 
 *** Obstacle Speed Limit
@@ -2313,7 +2656,7 @@ def costmap_speed_limit(self, state, path_xy, path_s):
 #+end_src
 
 *** End of Path
-The termination check stops the robot once it is within =xy_goal_tolerance= of the end of the path. Before this taper, it got there at full speed. At 1.5 m/s the zero command came too late: the robot coasted ~0.4 m and stopped 0.20-0.28 m past the end by its own estimate (TDM-25). So the target speed is now capped by the arc length left to the end of the path, $v \le \sqrt{2 a d}$ with $a$ = =goal_decel=. That is the speed from which braking at $a$ stops the robot exactly at the end. With 0.8 m/s² it starts braking 1.4 m out and reaches the tolerance circle at 0.63 m/s, where the zero command takes over. =goal_creep_speed= is a floor: when the robot reaches the end but is still outside the tolerance (off to the side, or at the wrong heading), it keeps moving instead of stalling just short.
+The termination check stops the robot once it is within =xy_goal_tolerance= of the end of the path. Before this taper, it got there at full speed. At 1.5 m/s the zero command came too late: the robot coasted ~0.4 m and stopped 0.20-0.28 m past the end by its own estimate (TDM-25). So the target speed is now capped by the arc length left to the end of the path, $v \le \sqrt{2 a d}$ with $a$ = =goal_decel=. That is the speed from which braking at $a$ stops the robot exactly at the end. With 0.8 m/s² it starts braking 1.4 m out and reaches the tolerance circle at 0.63 m/s, where the zero command takes over. =goal_creep_speed= is a floor, so a robot still outside the tolerances (off to the side, or at the wrong heading) keeps moving instead of stalling just short of the end. Once it is abeam of the end or past it, the goal ends there ([[*Check Termination][Check Termination]]).
 
 The follower can't tell a path that ends at the goal from one that local_planner will replace in half a second, so every path gets the taper. That costs nothing: local_planner aims ~12 m ahead, so its intermediate paths end well beyond the 1.4 m where the taper starts. Only the last paths, which end at the goal itself, get close enough. The taper and the obstacle limit are separate caps on the same target, and the lower one wins.
 
