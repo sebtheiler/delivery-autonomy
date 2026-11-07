@@ -7,6 +7,9 @@ from geometry_msgs.msg import PoseStamped, Point
 from nav_msgs.msg import Path
 from visualization_msgs.msg import Marker
 from shared_types.action import ComputePath 
+from sensor_msgs.msg import NavSatFix
+from rclpy.qos import qos_profile_sensor_data
+import time
 from shapely.geometry import Point as ShapelyPoint
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
@@ -18,9 +21,15 @@ class GlobalPlanningServer(Node):
     def __init__(self):
         super().__init__('path_planning_server')
         
-        # TODO: make dynamic
-        self.origin_lat = 38.648000
-        self.origin_lon = -90.302500
+        self.use_gps_start = self.declare_parameter(
+            'use_gps_start', not self.get_parameter('use_sim_time').value).value
+        self.gps_max_age = self.declare_parameter('gps_max_age_sec', 2.0).value
+        if not math.isfinite(self.gps_max_age) or self.gps_max_age <= 0:
+            raise ValueError('gps_max_age_sec must be finite and positive')
+        gps_topic = self.declare_parameter('gps_topic', '/gps/fix').value
+        self.latest_fix = None
+        self.gps_subscription = self.create_subscription(
+            NavSatFix, gps_topic, self.gps_callback, qos_profile_sensor_data)
         
         # Load graph
         self.get_logger().info("Generating and projecting OSM graph...")
@@ -50,17 +59,38 @@ class GlobalPlanningServer(Node):
         self.get_logger().info(f"Sample Node IDs for testing: {list(G.nodes)[:5]}")
         G_proj = ox.project_graph(G)
     
-        # Calculate the UTM coordinates of the Gazebo origin
-        # origin_point = ShapelyPoint(self.origin_lon, self.origin_lat)
-        # origin_proj = ox.projection.project_geometry(origin_point, to_crs=G_proj.graph['crs'])[0]
-    
-        # this is hardcoded because the Gazebo sim is messed up in some weird way. Not great
+        # Fixed map-frame calibration, shared with gps_datum_tf. NOT the robot start.
         true_origin_x = 734765 + 91.46309417473815
         true_origin_y = 4281212 - 24.993696585102057
     
         return G_proj, (true_origin_x, true_origin_y)
 
+    def gps_callback(self, msg):
+        if (msg.status.status < 0 or not math.isfinite(msg.latitude)
+                or not math.isfinite(msg.longitude)
+                or not -90 <= msg.latitude <= 90
+                or not -180 <= msg.longitude <= 180):
+            self.latest_fix = None
+            return
+        self.latest_fix = (msg, time.monotonic())
+    
     def get_current_robot_pose(self):
+        if self.use_gps_start:
+            if self.latest_fix is None:
+                self.get_logger().error('Waiting for a valid GPS fix before planning.')
+                return None, None
+            fix, received = self.latest_fix
+            stamp = fix.header.stamp.sec + fix.header.stamp.nanosec * 1e-9
+            age = self.get_clock().now().nanoseconds * 1e-9 - stamp
+            if (time.monotonic() - received > self.gps_max_age
+                    or (stamp != 0 and (age < -self.gps_max_age or age > self.gps_max_age))):
+                self.get_logger().error('GPS fix is stale; refusing to plan from an old position.')
+                return None, None
+            point, _ = ox.projection.project_geometry(
+                ShapelyPoint(fix.longitude, fix.latitude), crs='EPSG:4326',
+                to_crs=self.G_projected.graph['crs'])
+            return point.x - self.utm_origin[0], point.y - self.utm_origin[1]
+    
         try:
             t = self.tf_buffer.lookup_transform(
                 'map',
