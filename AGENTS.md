@@ -51,4 +51,4 @@ Everything runs in the one devshell now: `src/simulation/scripts/run_simulator.s
 
 ## The map->odom transform is a hardcoded calibration
 
-`autonomy.launch.py` publishes a fixed `map`->`odom` transform, and `state_estimation` sets its origin at the **first GPS fix it receives**. The two only agree if the robot is sitting at the spawn point when state estimation starts. After driving the robot around, restart the stack *and* respawn the robot, or every downstream frame is offset by however far it moved.
+`autonomy.launch.py` publishes a fixed `map`->`odom` transform, and `state_estimation` sets its origin at the **first GPS fix it receives**. The two only agree if the robot is sitting at the spawn point when state estimation starts. The constant is where the robot *settles* after the `z: 5.0` drop, (-94.630, 25.504), 0.37 m east of the spawn request: start state estimation after the robot has landed. After driving the robot around, restart the stack *and* respawn the robot, or every downstream frame is offset by however far it moved.

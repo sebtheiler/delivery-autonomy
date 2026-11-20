@@ -25,7 +25,30 @@ class GroundTruthExtractor(Node):
         self.last_y = 0.0
         self.last_yaw = 0.0
 
+        # Messages seen without the robot in them (it is removed during a remove + create reset)
+        self.missing = 0
+
     def listener_callback(self, msg):
+        # While the robot is removed the topic keeps publishing, with no transforms at all.
+        # Skip those, and restart the differentiation when it comes back: the first pose after
+        # a reset is a jump to the spawn point, not motion. The bridge leaves child_frame_id
+        # empty, so the robot is recognised only as the first (and, in this world, only)
+        # dynamic model, followed by its links.
+        if not msg.transforms:
+            if self.missing == 0:
+                self.get_logger().warning(
+                    "No robot pose on the dynamic pose topic (model removed?); "
+                    "not publishing /ground_truth/odom until it is back"
+                )
+            self.missing += 1
+            self.last_time = None
+            return
+        if self.missing:
+            self.get_logger().info(
+                f"Robot pose back after {self.missing} empty pose messages"
+            )
+            self.missing = 0
+
         t = msg.transforms[0]
         current_time = self.get_clock().now().nanoseconds * 1e-9
 

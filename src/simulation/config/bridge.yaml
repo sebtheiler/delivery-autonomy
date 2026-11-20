@@ -8,12 +8,12 @@
   gz_type_name: gz.msgs.Clock
   direction: GZ_TO_ROS
 
-# Transforms
-- ros_topic_name: /tf
-  gz_topic_name: /model/delivery_robot/tf
-  ros_type_name: tf2_msgs/msg/TFMessage
-  gz_type_name: gz.msgs.Pose_V
-  direction: GZ_TO_ROS
+# Transforms: not bridged. The only thing on /model/delivery_robot/tf is the
+# Ackermann plugin's wheel odometry as odom -> base_footprint (gz-sim ignores
+# <publish_odom_tf>false</publish_odom_tf>). On ROS /tf that gave the robot a
+# second odom -> ... chain next to the EKF's odom -> base_link. TF comes from
+# state_estimation (odom -> base_link) and robot_state_publisher (the rest);
+# the same wheel odometry still reaches the EKF as /odom below.
 
 # Control robot from ROS
 - ros_topic_name: /cmd_vel

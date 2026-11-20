@@ -27,8 +27,6 @@
   </inertial>
 </xacro:macro>
 
-<link name="base_footprint"/>
-
 <link name="base_link">
   <visual>
     <geometry>
@@ -44,10 +42,23 @@
   <xacro:box_inertia m="${chassis_mass}" w="${chassis_width}" h="${chassis_height}" d="${chassis_length}"/>
 </link>
 
+<!-- base_link is the root link, as in delivery-robo's robot_description: the
+     EKF (state_estimation) publishes odom -> base_link, so a base_footprint ->
+     base_link joint here would give base_link two TF parents and orphan
+     base_footprint. base_footprint hangs wheel_radius below base_link, on the
+     ground. robot_state_publisher warns that the root link has an inertia
+     (KDL ignores it); that is expected, don't add a dummy root to silence it.
+     robot.sdf was not regenerated for this and is still rooted at
+     base_footprint: Gazebo's link names never reach ROS TF. Regenerating it
+     re-roots the Gazebo model at base_link with the same geometry and inertia
+     (checked by diff, not run), so its model frame moves up 0.15 m to the
+     chassis centre and /ground_truth/odom z reads 0.15 m higher. -->
+<link name="base_footprint"/>
+
 <joint name="base_joint" type="fixed">
-  <parent link="base_footprint"/>
-  <child link="base_link"/>
-  <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="base_footprint"/>
+  <origin xyz="0 0 ${-wheel_radius}" rpy="0 0 0"/>
 </joint>
 
 <xacro:macro name="rear_wheel" params="prefix y_offset">
@@ -234,6 +245,10 @@
 	<frame_id>odom</frame_id>
 	<child_frame_id>base_footprint</child_frame_id>
 
+	<!-- gz-sim's AckermannSteering has none of the four publish_* switches
+	     below and ignores them: it always publishes /odom and an odom ->
+	     base_footprint transform on /model/delivery_robot/tf. bridge.yaml
+	     deliberately leaves that transform off ROS /tf (the EKF owns odom). -->
 	<publish_odom>false</publish_odom>
 	<publish_odom_tf>false</publish_odom_tf>
 	<publish_wheel_tf>true</publish_wheel_tf>

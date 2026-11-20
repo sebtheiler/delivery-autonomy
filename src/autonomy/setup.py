@@ -13,6 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
+        (os.path.join("share", package_name, "maps"), glob("maps/*")),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -30,6 +31,7 @@ setup(
             'state_estimation = autonomy.state_estimation:main',
             'global_planner = autonomy.global_planner:main',
             'controller = autonomy.controller:main',
+            'boundary_map = autonomy.boundary_map:main',
         ],
     },
 )
